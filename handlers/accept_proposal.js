@@ -1,4 +1,6 @@
 // ─── accept_proposal.js ────────────────────────────────────────────────────
+// waitUntil stub — on Express, just fire and forget
+const waitUntil = (p) => Promise.resolve(p).catch(console.error)
 // POST /api/accept_proposal   { "page_id": "<proposal_page_id>" }
 // Triggered by "Mark as Accepted" Notion button on a Proposal page.
 //
@@ -17,7 +19,6 @@
 //   7. Notion automation watches Quotation "Approved" → fires create_invoice
 //      → Invoice + Project created automatically
 
-import { waitUntil } from "@vercel/functions"
 import { getPage, patchPage, createPage, queryDB, plain, DB } from "../lib/notion.js"
 
 function hdrs() {

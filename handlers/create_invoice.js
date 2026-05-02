@@ -1,4 +1,6 @@
 // ─── create_invoice.js ─────────────────────────────────────────────────────
+// waitUntil stub — on Express, just fire and forget
+const waitUntil = (p) => Promise.resolve(p).catch(console.error)
 // POST /api/create_invoice   { "page_id": "<quotation_page_id>" }
 // Triggered by Notion automation when Quotation Status → Approved.
 //
@@ -9,7 +11,6 @@
 // 5. Advances Lead/Deal stage → "Awaiting Deposit"
 // 6. Returns { invoice_id, project_id }
 
-import { waitUntil } from "@vercel/functions"
 import { getPage, patchPage, createPage, queryDB, plain, DB, getCurrency, hdrs, createTeamTask } from "../lib/notion.js"
 
 

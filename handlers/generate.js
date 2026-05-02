@@ -1,4 +1,6 @@
 // ─── generate.js ───────────────────────────────────────────────────────────
+// waitUntil stub — on Express, just fire and forget
+const waitUntil = (p) => Promise.resolve(p).catch(console.error)
 // GET /api/generate?page_id=<id>&type=quotation|invoice|receipt
 // Triggered by Notion button "Generate PDF".
 //
@@ -6,7 +8,6 @@
 // waitUntil() — Vercel's official API for post-response work in Node.js
 // serverless functions.
 
-import { waitUntil } from "@vercel/functions"
 import {
   fetchQuotationData, fetchInvoiceData, fetchProposalData,
   generateQuotationPdf, generateInvoicePdf, generateReceiptPdf

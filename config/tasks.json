@@ -1,0 +1,1231 @@
+{
+  "phases": [
+    {
+      "name": "Pre-Build Setup",
+      "phase_no": 0,
+      "phase_type": "Pre-Build",
+      "os_type": "All",
+      "owner": "Kai",
+      "scope": [
+        "all"
+      ],
+      "tasks": [
+        {
+          "name": "Send client welcome message + project brief summary",
+          "owner": "Kai",
+          "priority": "High",
+          "os_type": "All"
+        },
+        {
+          "name": "Send Notion workspace requirements checklist",
+          "owner": "Kai",
+          "priority": "High",
+          "os_type": "All"
+        },
+        {
+          "name": "Schedule kickoff call (60 min) \u2014 send opxio.io/book link",
+          "owner": "Kai",
+          "priority": "High",
+          "os_type": "All"
+        },
+        {
+          "name": "Confirm OS scope and module list with client",
+          "owner": "Kai",
+          "priority": "High",
+          "os_type": "All"
+        },
+        {
+          "name": "Create internal build brief in Notion (Project page)",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "All"
+        },
+        {
+          "name": "Set up client-facing Project Portal view (read-only guest link)",
+          "owner": "Nadia",
+          "priority": "Medium",
+          "os_type": "All"
+        }
+      ]
+    },
+    {
+      "name": "Infrastructure & Access Setup",
+      "phase_no": 1,
+      "phase_type": "Infrastructure",
+      "os_type": "All",
+      "owner": "Nadia",
+      "scope": [
+        "all"
+      ],
+      "tasks": [
+        {
+          "name": "Create client record in Supabase",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Infrastructure"
+        },
+        {
+          "name": "Generate client API token",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Infrastructure"
+        },
+        {
+          "name": "Store client token in Supabase clients table (client_id, token, notion_workspace_id, created_at)",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Infrastructure"
+        },
+        {
+          "name": "Add client Notion workspace ID to Supabase record",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Infrastructure"
+        },
+        {
+          "name": "Configure client Notion integration token in api.opxio.io environment (Vercel env vars)",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Infrastructure"
+        },
+        {
+          "name": "Test API connection \u2014 hit qualify or cal-webhook endpoint, confirm 200 response",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Infrastructure"
+        },
+        {
+          "name": "Configure client record in Vercel project (if client gets dedicated widget deployment)",
+          "owner": "Nadia",
+          "priority": "Medium",
+          "os_type": "Infrastructure"
+        },
+        {
+          "name": "Whitelist client Notion workspace on relevant API endpoints",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Infrastructure"
+        },
+        {
+          "name": "Verify all active endpoints respond correctly for this client",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Infrastructure"
+        },
+        {
+          "name": "Document client credentials in internal Opxio vault (not Notion)",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Infrastructure"
+        }
+      ]
+    },
+    {
+      "name": "Foundation Build",
+      "phase_no": 2,
+      "phase_type": "Foundation",
+      "os_type": "All",
+      "owner": "Nadia",
+      "scope": [
+        "all"
+      ],
+      "tasks": [
+        {
+          "name": "Install Base OS \u2014 Companies & People databases",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "All"
+        },
+        {
+          "name": "Install Base OS \u2014 Client Accounts database",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "All"
+        },
+        {
+          "name": "Install Base OS \u2014 Team Members & Staff Directory",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "All"
+        },
+        {
+          "name": "Install Base OS \u2014 Company Profile",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "All"
+        },
+        {
+          "name": "Install Base OS \u2014 Dashboard Hub (static)",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "All"
+        },
+        {
+          "name": "Stitch all Base OS relations",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "All"
+        },
+        {
+          "name": "Populate Company Profile with client data",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "All"
+        },
+        {
+          "name": "Internal QC \u2014 Base OS functional check",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "All"
+        }
+      ]
+    },
+    {
+      "name": "Revenue OS",
+      "phase_no": 3,
+      "phase_type": "OS Build",
+      "os_type": "Revenue OS",
+      "owner": "Nadia",
+      "scope": [
+        "revenue_os"
+      ],
+      "dependency": null,
+      "tasks": [
+        {
+          "name": "Install CRM, Pipeline & Deals",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Revenue OS"
+        },
+        {
+          "name": "Install Product & Pricing Catalogue",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Revenue OS"
+        },
+        {
+          "name": "Install Billing & Payment Tracker",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Revenue OS"
+        },
+        {
+          "name": "Install Retainer Management",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Revenue OS"
+        },
+        {
+          "name": "Install Meetings & Calls Log",
+          "owner": "Nadia",
+          "priority": "Medium",
+          "os_type": "Revenue OS"
+        },
+        {
+          "name": "Stitch CRM \u2192 Deals \u2192 Billing relations",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Revenue OS"
+        },
+        {
+          "name": "Stitch Deals \u2192 Meetings Log relation",
+          "owner": "Nadia",
+          "priority": "Medium",
+          "os_type": "Revenue OS"
+        },
+        {
+          "name": "Stitch Retainer Management \u2192 Client Accounts (Base OS)",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Revenue OS"
+        },
+        {
+          "name": "Configure automation \u2014 Deal stage change trigger",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Revenue OS"
+        },
+        {
+          "name": "Configure automation \u2014 Payment overdue trigger",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Revenue OS"
+        },
+        {
+          "name": "Configure automation \u2014 Retainer renewal reminder",
+          "owner": "Nadia",
+          "priority": "Medium",
+          "os_type": "Revenue OS"
+        },
+        {
+          "name": "QC \u2014 end-to-end deal flow test (Lead \u2192 Deal \u2192 Quote \u2192 Invoice)",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Revenue OS"
+        }
+      ]
+    },
+    {
+      "name": "Operations OS",
+      "phase_no": 3,
+      "phase_type": "OS Build",
+      "os_type": "Operations OS",
+      "owner": "Nadia",
+      "scope": [
+        "operations_os"
+      ],
+      "dependency": "revenue_os",
+      "tasks": [
+        {
+          "name": "Install Project & Task Management",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Operations OS"
+        },
+        {
+          "name": "Install Client Delivery Tracker",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Operations OS"
+        },
+        {
+          "name": "Install Approval & QC Tracker",
+          "owner": "Nadia",
+          "priority": "Medium",
+          "os_type": "Operations OS"
+        },
+        {
+          "name": "Install Internal Meeting & Action Log",
+          "owner": "Nadia",
+          "priority": "Medium",
+          "os_type": "Operations OS"
+        },
+        {
+          "name": "Install Resource & Capacity Planner",
+          "owner": "Nadia",
+          "priority": "Medium",
+          "os_type": "Operations OS"
+        },
+        {
+          "name": "Stitch Projects \u2192 Tasks relation",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Operations OS"
+        },
+        {
+          "name": "Stitch Projects \u2192 Client Accounts (Base OS)",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Operations OS"
+        },
+        {
+          "name": "Stitch Delivery Tracker \u2192 Projects relation",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Operations OS"
+        },
+        {
+          "name": "Stitch Capacity Planner \u2192 Team Members (Base OS)",
+          "owner": "Nadia",
+          "priority": "Medium",
+          "os_type": "Operations OS"
+        },
+        {
+          "name": "Configure automation \u2014 Task assigned trigger",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Operations OS"
+        },
+        {
+          "name": "Configure automation \u2014 Project status change trigger",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Operations OS"
+        },
+        {
+          "name": "Configure automation \u2014 Overdue task alert",
+          "owner": "Nadia",
+          "priority": "Medium",
+          "os_type": "Operations OS"
+        },
+        {
+          "name": "QC \u2014 end-to-end project flow test (Project created \u2192 Tasks assigned \u2192 Delivered)",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Operations OS"
+        }
+      ]
+    },
+    {
+      "name": "Marketing OS",
+      "phase_no": 3,
+      "phase_type": "OS Build",
+      "os_type": "Marketing OS",
+      "owner": "Nadia",
+      "scope": [
+        "marketing_os"
+      ],
+      "dependency": null,
+      "tasks": [
+        {
+          "name": "Install Content Production Tracker",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Marketing OS"
+        },
+        {
+          "name": "Install Campaign Tracker",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Marketing OS"
+        },
+        {
+          "name": "Install Lead Generation Tracker",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Marketing OS"
+        },
+        {
+          "name": "Install Marketing Performance Tracker",
+          "owner": "Nadia",
+          "priority": "Medium",
+          "os_type": "Marketing OS"
+        },
+        {
+          "name": "Install Brand & Asset Library",
+          "owner": "Nadia",
+          "priority": "Medium",
+          "os_type": "Marketing OS"
+        },
+        {
+          "name": "Stitch Content \u2192 Campaign relation",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Marketing OS"
+        },
+        {
+          "name": "Stitch Campaign \u2192 Lead Generation Tracker",
+          "owner": "Nadia",
+          "priority": "Medium",
+          "os_type": "Marketing OS"
+        },
+        {
+          "name": "Stitch Lead Generation \u2192 CRM (if Revenue OS in scope)",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Marketing OS"
+        },
+        {
+          "name": "Configure automation \u2014 Content status change trigger",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Marketing OS"
+        },
+        {
+          "name": "Configure automation \u2014 Campaign go-live reminder",
+          "owner": "Nadia",
+          "priority": "Medium",
+          "os_type": "Marketing OS"
+        },
+        {
+          "name": "Configure automation \u2014 Lead capture to CRM push (if Revenue OS in scope)",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Marketing OS"
+        },
+        {
+          "name": "QC \u2014 content production flow test (Brief \u2192 In Production \u2192 Published)",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Marketing OS"
+        }
+      ]
+    },
+    {
+      "name": "Finance OS",
+      "phase_no": 3,
+      "phase_type": "OS Build",
+      "os_type": "Finance OS",
+      "owner": "Nadia",
+      "scope": [
+        "finance_os"
+      ],
+      "dependency": "revenue_os",
+      "tasks": [
+        {
+          "name": "Install Finance Ledger",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Finance OS"
+        },
+        {
+          "name": "Install Cash Flow Tracker",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Finance OS"
+        },
+        {
+          "name": "Install Invoice & Payment Tracker",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Finance OS"
+        },
+        {
+          "name": "Install Payroll & Staff Costs",
+          "owner": "Nadia",
+          "priority": "Medium",
+          "os_type": "Finance OS"
+        },
+        {
+          "name": "Install Profit & Loss Tracker",
+          "owner": "Nadia",
+          "priority": "Medium",
+          "os_type": "Finance OS"
+        },
+        {
+          "name": "Stitch Finance Ledger \u2192 Invoice & Payment Tracker",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Finance OS"
+        },
+        {
+          "name": "Stitch Payroll \u2192 Team Members (Base OS)",
+          "owner": "Nadia",
+          "priority": "Medium",
+          "os_type": "Finance OS"
+        },
+        {
+          "name": "Stitch Invoice & Payment \u2192 Billing Tracker (if Revenue OS in scope)",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Finance OS"
+        },
+        {
+          "name": "Configure automation \u2014 Invoice overdue trigger",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Finance OS"
+        },
+        {
+          "name": "Configure automation \u2014 Payroll cycle reminder",
+          "owner": "Nadia",
+          "priority": "Medium",
+          "os_type": "Finance OS"
+        },
+        {
+          "name": "Configure automation \u2014 Expense approval trigger",
+          "owner": "Nadia",
+          "priority": "Medium",
+          "os_type": "Finance OS"
+        },
+        {
+          "name": "QC \u2014 cash flow end-to-end test (Invoice issued \u2192 Payment received \u2192 Ledger updated)",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Finance OS"
+        }
+      ]
+    },
+    {
+      "name": "Team OS",
+      "phase_no": 3,
+      "phase_type": "OS Build",
+      "os_type": "Team OS",
+      "owner": "Nadia",
+      "scope": [
+        "team_os"
+      ],
+      "dependency": "operations_os",
+      "tasks": [
+        {
+          "name": "Install Hiring Pipeline",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Team OS"
+        },
+        {
+          "name": "Install Team Onboarding Tracker",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Team OS"
+        },
+        {
+          "name": "Install Performance & Goals",
+          "owner": "Nadia",
+          "priority": "Medium",
+          "os_type": "Team OS"
+        },
+        {
+          "name": "Install Leave & Availability",
+          "owner": "Nadia",
+          "priority": "Medium",
+          "os_type": "Team OS"
+        },
+        {
+          "name": "Install Role & Compensation Log",
+          "owner": "Nadia",
+          "priority": "Medium",
+          "os_type": "Team OS"
+        },
+        {
+          "name": "Stitch Hiring Pipeline \u2192 Team Members (Base OS)",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Team OS"
+        },
+        {
+          "name": "Stitch Onboarding Tracker \u2192 Team Members (Base OS)",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Team OS"
+        },
+        {
+          "name": "Stitch Performance & Goals \u2192 Team Members (Base OS)",
+          "owner": "Nadia",
+          "priority": "Medium",
+          "os_type": "Team OS"
+        },
+        {
+          "name": "Stitch Leave & Availability \u2192 Capacity Planner (if Operations OS in scope)",
+          "owner": "Nadia",
+          "priority": "Medium",
+          "os_type": "Team OS"
+        },
+        {
+          "name": "Configure automation \u2014 New hire onboarding kickoff trigger",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Team OS"
+        },
+        {
+          "name": "Configure automation \u2014 Leave request approval trigger",
+          "owner": "Nadia",
+          "priority": "Medium",
+          "os_type": "Team OS"
+        },
+        {
+          "name": "QC \u2014 hiring to onboarding flow test",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Team OS"
+        }
+      ]
+    },
+    {
+      "name": "Retention OS",
+      "phase_no": 3,
+      "phase_type": "OS Build",
+      "os_type": "Retention OS",
+      "owner": "Nadia",
+      "scope": [
+        "retention_os"
+      ],
+      "dependency": "revenue_os",
+      "tasks": [
+        {
+          "name": "Install Client Health Tracker",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Retention OS"
+        },
+        {
+          "name": "Install Client Communication Log",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Retention OS"
+        },
+        {
+          "name": "Install Renewal Pipeline",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Retention OS"
+        },
+        {
+          "name": "Install Upsell Opportunity Tracker",
+          "owner": "Nadia",
+          "priority": "Medium",
+          "os_type": "Retention OS"
+        },
+        {
+          "name": "Install Retainer Health Tracker",
+          "owner": "Nadia",
+          "priority": "Medium",
+          "os_type": "Retention OS"
+        },
+        {
+          "name": "Stitch Client Health \u2192 Client Accounts (Base OS)",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Retention OS"
+        },
+        {
+          "name": "Stitch Renewal Pipeline \u2192 Retainer Management (Revenue OS) \u2014 hard dependency",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Retention OS"
+        },
+        {
+          "name": "Stitch Retainer Health \u2192 Retainer Management (Revenue OS) \u2014 hard dependency",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Retention OS"
+        },
+        {
+          "name": "Stitch Upsell Tracker \u2192 Deals (Revenue OS)",
+          "owner": "Nadia",
+          "priority": "Medium",
+          "os_type": "Retention OS"
+        },
+        {
+          "name": "Configure automation \u2014 Health score drop alert",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Retention OS"
+        },
+        {
+          "name": "Configure automation \u2014 Renewal due reminder",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Retention OS"
+        },
+        {
+          "name": "QC \u2014 retention flow test (Health tracked \u2192 Renewal triggered \u2192 Upsell logged)",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Retention OS"
+        }
+      ]
+    },
+    {
+      "name": "Expansion QC & Integration Check",
+      "phase_no": 4,
+      "phase_type": "QC",
+      "os_type": "All",
+      "owner": "Nadia",
+      "scope": [
+        "expansion"
+      ],
+      "tasks": [
+        {
+          "name": "QC \u2014 new OS module(s) installed correctly",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "All"
+        },
+        {
+          "name": "QC \u2014 all new relations stitched to existing Base OS modules",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "All"
+        },
+        {
+          "name": "QC \u2014 cross-OS relations working with existing installed modules",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "All"
+        },
+        {
+          "name": "QC \u2014 new automations tested end-to-end (if applicable)",
+          "owner": "Nadia",
+          "priority": "Medium",
+          "os_type": "All"
+        },
+        {
+          "name": "Internal sign-off \u2014 expansion build ready for client review",
+          "owner": "Kai",
+          "priority": "High",
+          "os_type": "All"
+        },
+        {
+          "name": "Send client update \u2014 new OS module(s) added to their workspace",
+          "owner": "Kai",
+          "priority": "High",
+          "os_type": "All"
+        },
+        {
+          "name": "Collect client feedback and action revisions",
+          "owner": "Nadia",
+          "priority": "Medium",
+          "os_type": "All"
+        }
+      ]
+    },
+    {
+      "name": "Expansion Handover",
+      "phase_no": 5,
+      "phase_type": "Handover",
+      "os_type": "All",
+      "owner": "Kai",
+      "scope": [
+        "expansion"
+      ],
+      "tasks": [
+        {
+          "name": "Record Loom walkthrough of new OS module(s)",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "All"
+        },
+        {
+          "name": "Brief client on new OS \u2014 async message or 30-min walkthrough call",
+          "owner": "Kai",
+          "priority": "High",
+          "os_type": "All"
+        },
+        {
+          "name": "Confirm client can navigate new workspace sections independently",
+          "owner": "Kai",
+          "priority": "Medium",
+          "os_type": "All"
+        },
+        {
+          "name": "Issue and send final expansion invoice",
+          "owner": "Kai",
+          "priority": "High",
+          "os_type": "All"
+        },
+        {
+          "name": "Mark expansion build Completed in Notion",
+          "owner": "Kai",
+          "priority": "High",
+          "os_type": "All"
+        }
+      ]
+    },
+    {
+      "name": "Enhanced Dashboard",
+      "phase_no": 4,
+      "phase_type": "Add-On",
+      "os_type": "Add-On",
+      "owner": "Nadia",
+      "scope": [
+        "enhanced_dashboard"
+      ],
+      "dependency": null,
+      "tasks": [
+        {
+          "name": "Audit all installed OS modules \u2014 confirm data sources available for dashboard",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Add-On"
+        },
+        {
+          "name": "Define dashboard KPIs with client (discovery or async)",
+          "owner": "Kai",
+          "priority": "High",
+          "os_type": "Add-On"
+        },
+        {
+          "name": "Design dashboard layout (wireframe)",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Add-On"
+        },
+        {
+          "name": "Build dashboard component \u2014 Vercel project setup",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Add-On"
+        },
+        {
+          "name": "Build data fetch layer \u2014 Notion API queries per KPI block",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Add-On"
+        },
+        {
+          "name": "Build each KPI widget (revenue, pipeline, project status, capacity etc.)",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Add-On"
+        },
+        {
+          "name": "Style to Opxio widget spec (Satoshi, #AAFF00, dark theme)",
+          "owner": "Nadia",
+          "priority": "Medium",
+          "os_type": "Add-On"
+        },
+        {
+          "name": "Deploy to widgets.opxio.io",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Add-On"
+        },
+        {
+          "name": "Embed in Notion Dashboard Hub page",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Add-On"
+        },
+        {
+          "name": "Test live data rendering \u2014 all blocks pulling correctly",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Add-On"
+        },
+        {
+          "name": "Test embed responsiveness inside Notion",
+          "owner": "Nadia",
+          "priority": "Medium",
+          "os_type": "Add-On"
+        },
+        {
+          "name": "QC \u2014 full dashboard functional check",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Add-On"
+        },
+        {
+          "name": "Record Loom walkthrough of dashboard for client",
+          "owner": "Nadia",
+          "priority": "Medium",
+          "os_type": "Add-On"
+        }
+      ]
+    },
+    {
+      "name": "Automations",
+      "phase_no": 4,
+      "phase_type": "Add-On",
+      "os_type": "Add-On",
+      "owner": "Nadia",
+      "scope": [
+        "automations"
+      ],
+      "dependency": null,
+      "tasks": [
+        {
+          "name": "Define automation trigger and action (document in build brief)",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Add-On"
+        },
+        {
+          "name": "Map data flow \u2014 input fields, conditions, output destination",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Add-On"
+        },
+        {
+          "name": "Build scenario / workflow in Make.com or N8N",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Add-On"
+        },
+        {
+          "name": "Connect Notion webhook or API trigger",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Add-On"
+        },
+        {
+          "name": "Test trigger end-to-end (happy path)",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Add-On"
+        },
+        {
+          "name": "Test edge cases (empty fields, failed triggers, duplicates)",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Add-On"
+        },
+        {
+          "name": "Document automation logic in client handover guide",
+          "owner": "Nadia",
+          "priority": "Medium",
+          "os_type": "Add-On"
+        },
+        {
+          "name": "QC \u2014 live trigger test with real data",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Add-On"
+        }
+      ]
+    },
+    {
+      "name": "Custom Widget",
+      "phase_no": 4,
+      "phase_type": "Add-On",
+      "os_type": "Add-On",
+      "owner": "Nadia",
+      "scope": [
+        "custom_widget"
+      ],
+      "dependency": null,
+      "tasks": [
+        {
+          "name": "Define widget purpose, data source, and display logic",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Add-On"
+        },
+        {
+          "name": "Design widget layout (static mockup)",
+          "owner": "Nadia",
+          "priority": "Medium",
+          "os_type": "Add-On"
+        },
+        {
+          "name": "Build widget \u2014 Vercel project setup (or add to existing)",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Add-On"
+        },
+        {
+          "name": "Build data fetch layer \u2014 Notion API or external source",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Add-On"
+        },
+        {
+          "name": "Style to Opxio widget spec",
+          "owner": "Nadia",
+          "priority": "Medium",
+          "os_type": "Add-On"
+        },
+        {
+          "name": "Deploy to widgets.opxio.io",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Add-On"
+        },
+        {
+          "name": "Embed in relevant Notion page",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Add-On"
+        },
+        {
+          "name": "Test data rendering and refresh logic",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Add-On"
+        },
+        {
+          "name": "QC \u2014 widget functional check",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "Add-On"
+        },
+        {
+          "name": "Document widget in handover guide",
+          "owner": "Nadia",
+          "priority": "Medium",
+          "os_type": "Add-On"
+        }
+      ]
+    },
+    {
+      "name": "QC & Handover Prep",
+      "phase_no": 5,
+      "phase_type": "QC",
+      "os_type": "All",
+      "owner": "Nadia",
+      "scope": [
+        "all"
+      ],
+      "tasks": [
+        {
+          "name": "Full system QC \u2014 all modules, relations, automations",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "All"
+        },
+        {
+          "name": "Test all Notion automations end-to-end",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "All"
+        },
+        {
+          "name": "Test all API endpoints for this client",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "All"
+        },
+        {
+          "name": "Populate system with sample/dummy data for client demo",
+          "owner": "Nadia",
+          "priority": "Medium",
+          "os_type": "All"
+        },
+        {
+          "name": "Internal sign-off \u2014 Kai reviews before sending to client",
+          "owner": "Kai",
+          "priority": "High",
+          "os_type": "All"
+        },
+        {
+          "name": "Send Review 1 access to client \u2014 share guest link with instructions",
+          "owner": "Kai",
+          "priority": "High",
+          "os_type": "All",
+          "review_round": "Review 1"
+        },
+        {
+          "name": "Send Review 1 brief \u2014 what to look at, feedback format, deadline",
+          "owner": "Kai",
+          "priority": "High",
+          "os_type": "All",
+          "review_round": "Review 1"
+        },
+        {
+          "name": "Collect Review 1 feedback",
+          "owner": "Kai",
+          "priority": "High",
+          "os_type": "All",
+          "review_round": "Review 1"
+        },
+        {
+          "name": "Log Review 1 feedback items in project",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "All",
+          "review_round": "Review 1"
+        },
+        {
+          "name": "Action Review 1 revisions",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "All",
+          "review_round": "Review 1"
+        },
+        {
+          "name": "Internal check \u2014 Review 1 revisions complete",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "All",
+          "review_round": "Review 1"
+        },
+        {
+          "name": "Send Review 2 access to client \u2014 updated system",
+          "owner": "Kai",
+          "priority": "High",
+          "os_type": "All",
+          "review_round": "Review 2"
+        },
+        {
+          "name": "Send Review 2 brief \u2014 final check, flag critical only",
+          "owner": "Kai",
+          "priority": "High",
+          "os_type": "All",
+          "review_round": "Review 2"
+        },
+        {
+          "name": "Collect Review 2 feedback",
+          "owner": "Kai",
+          "priority": "High",
+          "os_type": "All",
+          "review_round": "Review 2"
+        },
+        {
+          "name": "Log Review 2 feedback items in project",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "All",
+          "review_round": "Review 2"
+        },
+        {
+          "name": "Action Review 2 revisions",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "All",
+          "review_round": "Review 2"
+        },
+        {
+          "name": "Internal sign-off \u2014 Review 2 complete, system ready for handover",
+          "owner": "Kai",
+          "priority": "High",
+          "os_type": "All",
+          "review_round": "Review 2"
+        }
+      ]
+    },
+    {
+      "name": "Handover & Close",
+      "phase_no": 6,
+      "phase_type": "Handover",
+      "os_type": "All",
+      "owner": "Kai",
+      "scope": [
+        "all"
+      ],
+      "tasks": [
+        {
+          "name": "Schedule handover session (60 min screen share)",
+          "owner": "Kai",
+          "priority": "High",
+          "os_type": "All"
+        },
+        {
+          "name": "Build handover guide (Notion doc \u2014 what each module does, how to use it)",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "All"
+        },
+        {
+          "name": "Record Loom walkthrough of full system",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "All"
+        },
+        {
+          "name": "Run live handover walkthrough with client",
+          "owner": "Kai",
+          "priority": "High",
+          "os_type": "All"
+        },
+        {
+          "name": "Transfer workspace ownership to client",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "All"
+        },
+        {
+          "name": "Configure member permissions (Exec / Ops / Staff access tiers)",
+          "owner": "Nadia",
+          "priority": "High",
+          "os_type": "All"
+        },
+        {
+          "name": "Remove Opxio guest access (post-handover if client requests)",
+          "owner": "Nadia",
+          "priority": "Medium",
+          "os_type": "All"
+        },
+        {
+          "name": "Send final invoice",
+          "owner": "Kai",
+          "priority": "High",
+          "os_type": "All"
+        },
+        {
+          "name": "Collect payment confirmation",
+          "owner": "Kai",
+          "priority": "High",
+          "os_type": "All"
+        },
+        {
+          "name": "Mark project Completed",
+          "owner": "Kai",
+          "priority": "High",
+          "os_type": "All"
+        },
+        {
+          "name": "Send post-project follow-up message (30 days \u2014 maintenance retainer pitch)",
+          "owner": "Kai",
+          "priority": "Medium",
+          "os_type": "All"
+        },
+        {
+          "name": "Document case study brief (for Notion Partner application)",
+          "owner": "Kai",
+          "priority": "Medium",
+          "os_type": "All"
+        }
+      ]
+    }
+  ]
+}

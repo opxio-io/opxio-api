@@ -1,0 +1,226 @@
+// Vercel Serverless Function — Campaign Stats
+// Queries Monthly Campaigns DB for active campaign metrics
+// Environment variables: NOTION_API_KEY
+
+import { getClientByToken, getNotionToken, resolveDB, resolveField, resolveLabel } from "../../../lib/supabase"
+
+
+export async function handler(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET');
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+
+  // Token auth: resolves per-client Notion key from Supabase (no env var per client)
+  const token = req.query.token || req.headers['x-widget-token']
+  if (!token) return res.status(401).json({ error: 'Missing token' })
+  const client = await getClientByToken(token)
+  if (!client) return res.status(403).json({ error: 'Invalid token' })
+  const NOTION_KEY = getNotionToken(client)
+  const CAMPAIGNS_DB = resolveDB(client, 'CAMPAIGNS_DB', '3188b289e31a806bac9de1ee09aff2ad')
+
+  // ── Field name mapping ────────────────────────────────────────────────────
+  const F = {
+    CAMPAIGN_STATUS:         resolveField(client, 'CAMPAIGN_STATUS',         'Campaign Status'),
+    CAMPAIGN_TYPE:           resolveField(client, 'CAMPAIGN_TYPE',           'Campaign Type'),
+    CAMPAIGN_NAME:           resolveField(client, 'CAMPAIGN_NAME',           'Campaign Name'),
+    CLIENT:                  resolveField(client, 'CLIENT',                  'Client'),
+    START_DATE:              resolveField(client, 'START_DATE',              'Start Date'),
+    END_DATE:                resolveField(client, 'END_DATE',                'End Date'),
+    VIDEOS:                  resolveField(client, 'VIDEOS',                  'Videos'),
+    POSTERS:                 resolveField(client, 'POSTERS',                 'Posters'),
+    LIVE_SESSION:            resolveField(client, 'LIVE_SESSION',            'Live Session'),
+    KOL_POSTS:               resolveField(client, 'KOL_POSTS',              'KOL Posts'),
+    VIDEOS_COMPLETED:        resolveField(client, 'VIDEOS_COMPLETED',        'Videos Completed'),
+    POSTERS_COMPLETED:       resolveField(client, 'POSTERS_COMPLETED',       'Posters Completed'),
+    LIVESTREAMS_COMPLETED:   resolveField(client, 'LIVESTREAMS_COMPLETED',   'Livestreams Completed'),
+    KOL_COMPLETED:           resolveField(client, 'KOL_COMPLETED',           'KOL Postings Completed'),
+    LIVE_GMV:                resolveField(client, 'LIVE_GMV',                'Overall Live GMV'),
+    LIVE_HOURS:              resolveField(client, 'LIVE_HOURS',              'Overall Live Hours'),
+    LIVE_ORDERS:             resolveField(client, 'LIVE_ORDERS',             'Overall Live Orders'),
+    LIVE_SESSIONS:           resolveField(client, 'LIVE_SESSIONS',           'Overall Live Sessions'),
+  }
+
+  // ── Status label mapping ──────────────────────────────────────────────────
+  const campaignActiveStatus = resolveLabel(client, 'campaignActiveStatus', 'Active')
+
+  try {
+
+    const headers = {
+      'Authorization': `Bearer ${NOTION_KEY}`,
+      'Notion-Version': '2022-06-28',
+      'Content-Type': 'application/json',
+    };
+
+    async function queryAll(dbId, filter) {
+      let all = [], hasMore = true, cursor;
+      while (hasMore) {
+        const body = { page_size: 100 };
+        if (filter) body.filter = filter;
+        if (cursor) body.start_cursor = cursor;
+        const r = await fetch(`https://api.notion.com/v1/databases/${dbId}/query`, {
+          method: 'POST', headers, body: JSON.stringify(body),
+        });
+        if (!r.ok) throw new Error(`DB query error (${r.status}): ${await r.text()}`);
+        const d = await r.json();
+        all = all.concat(d.results);
+        hasMore = d.has_more;
+        cursor = d.next_cursor;
+      }
+      return all;
+    }
+
+    const getTitle     = p => p?.type === 'title' ? (p.title || []).map(t => t.plain_text).join('') : '';
+    const getStatus    = p => p?.type === 'status' ? p.status?.name : null;
+    const getNumber    = p => p?.type === 'number' ? (p.number || 0) : 0;
+    const getSelect    = p => p?.type === 'select' ? p.select?.name : null;
+    const getDate      = p => p?.type === 'date' ? (p.date?.start || null) : null;
+
+    const getRollupText = p => {
+      if (!p || p.type !== 'rollup') return '';
+      const r = p.rollup;
+      if (r.type === 'array') {
+        return (r.array || []).map(item => {
+          if (item.type === 'title') return (item.title || []).map(t => t.plain_text).join('');
+          if (item.type === 'rich_text') return (item.rich_text || []).map(t => t.plain_text).join('');
+          return '';
+        }).filter(Boolean).join(', ');
+      }
+      return '';
+    };
+
+    const getRollupNumber = p => {
+      if (!p || p.type !== 'rollup') return 0;
+      const r = p.rollup;
+      if (r.type === 'number') return r.number || 0;
+      if (r.type === 'array') {
+        return (r.array || []).reduce((sum, item) => {
+          if (item.type === 'number') return sum + (item.number || 0);
+          if (item.type === 'formula') {
+            const f = item.formula;
+            if (f.type === 'number') return sum + (f.number || 0);
+            if (f.type === 'boolean') return sum + (f.boolean ? 1 : 0);
+            if (f.type === 'string') return sum + (parseFloat(f.string) || 0);
+          }
+          return sum;
+        }, 0);
+      }
+      return 0;
+    };
+
+    const campaigns = await queryAll(CAMPAIGNS_DB);
+
+    let activeCampaigns = 0;
+    let totalDeliverables = 0;
+    let completedDeliverables = 0;
+    const typeCounts = {};
+    const completionRates = [];
+
+    let videosPlanned = 0, videosCompleted = 0;
+    let postersPlanned = 0, postersCompleted = 0;
+    let livePlanned = 0, liveCompleted = 0;
+    let kolPlanned = 0, kolCompleted = 0;
+
+    let totalLiveGMV = 0, totalLiveHours = 0, totalLiveOrders = 0;
+    let totalLiveSessions = 0;
+    let totalTikTokSales = 0, totalShopeeSales = 0;
+
+    const campaignDetails = [];
+
+    for (const page of campaigns) {
+      const props = page.properties;
+      const status = getStatus(props[F.CAMPAIGN_STATUS]);
+      const type   = getSelect(props[F.CAMPAIGN_TYPE]);
+      const name   = getTitle(props[F.CAMPAIGN_NAME]);
+
+      if (status !== campaignActiveStatus) continue;
+
+      activeCampaigns++;
+      if (type) typeCounts[type] = (typeCounts[type] || 0) + 1;
+
+      // Client name from rollup
+      const clientName = getRollupText(props[F.CLIENT]) || null;
+
+      // Dates
+      const startDate = getDate(props[F.START_DATE]);
+      const endDate   = getDate(props[F.END_DATE]);
+
+      // Planned
+      const videos   = getNumber(props[F.VIDEOS]);
+      const posters  = getNumber(props[F.POSTERS]);
+      const live     = getNumber(props[F.LIVE_SESSION]);
+      const kolPosts = getNumber(props[F.KOL_POSTS]);
+      const planned  = videos + posters + live + kolPosts;
+
+      // Completed
+      const videosDone  = getRollupNumber(props[F.VIDEOS_COMPLETED]);
+      const postersDone = getRollupNumber(props[F.POSTERS_COMPLETED]);
+      const liveDone    = getRollupNumber(props[F.LIVESTREAMS_COMPLETED]);
+      const kolDone     = getRollupNumber(props[F.KOL_COMPLETED]);
+      const done        = videosDone + postersDone + liveDone + kolDone;
+
+      totalDeliverables += planned;
+      completedDeliverables += done;
+
+      videosPlanned += videos;   videosCompleted += videosDone;
+      postersPlanned += posters; postersCompleted += postersDone;
+      livePlanned += live;       liveCompleted += liveDone;
+      kolPlanned += kolPosts;    kolCompleted += kolDone;
+
+      totalLiveGMV      += getRollupNumber(props[F.LIVE_GMV]);
+      totalLiveHours    += getRollupNumber(props[F.LIVE_HOURS]);
+      totalLiveOrders   += getRollupNumber(props[F.LIVE_ORDERS]);
+      totalLiveSessions += getRollupNumber(props[F.LIVE_SESSIONS]);
+
+      if (planned > 0) completionRates.push(Math.round((done / planned) * 100));
+
+      campaignDetails.push({
+        name,
+        type: type || 'N/A',
+        client: clientName,
+        startDate,
+        endDate,
+        planned,
+        done,
+        pct: planned > 0 ? Math.round((done / planned) * 100) : 0,
+        contentBreakdown: {
+          videos:  { planned: videos,   completed: videosDone },
+          posters: { planned: posters,  completed: postersDone },
+          live:    { planned: live,     completed: liveDone },
+          kol:     { planned: kolPosts, completed: kolDone },
+        },
+      });
+    }
+
+    const avgCompletion = completionRates.length > 0
+      ? Math.round(completionRates.reduce((a, b) => a + b, 0) / completionRates.length)
+      : 0;
+
+    campaignDetails.sort((a, b) => a.pct - b.pct);
+
+    return res.status(200).json({
+      activeCampaigns,
+      totalDeliverables,
+      completedDeliverables,
+      remainingDeliverables: totalDeliverables - completedDeliverables,
+      avgCompletion,
+      contentBreakdown: {
+        videos:  { planned: videosPlanned, completed: videosCompleted },
+        posters: { planned: postersPlanned, completed: postersCompleted },
+        live:    { planned: livePlanned, completed: liveCompleted },
+        kol:     { planned: kolPlanned, completed: kolCompleted },
+      },
+      liveSessionMetrics: {
+        totalGMV: totalLiveGMV,
+        totalHours: totalLiveHours,
+        totalOrders: totalLiveOrders,
+        totalSessions: totalLiveSessions,
+      },
+      campaignDetails,
+      typeBreakdown: Object.entries(typeCounts).map(([name, count]) => ({ name, count })),
+    });
+
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: err.message });
+  }
+};

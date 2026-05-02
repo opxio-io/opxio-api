@@ -1,0 +1,182 @@
+// /api/data/deals — token-authenticated
+// Returns Deals DB stage breakdown + Proposals + Quotations counts
+// Used by: potential.html (pre-won stages), won.html (Building → Delivered)
+
+import { queryDB, plain, DB } from "../../../lib/notion"
+import { getClientByToken, getNotionToken, resolveDB, resolveField, checkOrigin } from "../../../lib/supabase"
+import { DEALS } from "../../../lib/demo-fixtures"
+
+export async function handler(req, res) {
+  if (req.method === "OPTIONS") return res.status(200).end()
+  res.setHeader("Access-Control-Allow-Origin", "*")
+  res.setHeader("Cache-Control", "s-maxage=60, stale-while-revalidate=120")
+
+  try {
+    const accessToken = req.query.token || req.headers["x-widget-token"]
+    if (!accessToken) return res.status(401).json({ error: "Missing token" })
+
+    const client = await getClientByToken(accessToken)
+    if (!client) return res.status(403).json({ error: "Invalid token" })
+    if (!checkOrigin(client, req)) return res.status(403).json({ error: "Origin not allowed" })
+    if (client.slug === "demo") return res.status(200).json(DEALS)
+
+    const notionToken   = getNotionToken(client)
+    const DEALS_DB      = resolveDB(client, "DEALS",      DB.DEALS)
+    const PROPOSALS_DB  = resolveDB(client, "PROPOSALS",  DB.PROPOSALS)
+    const QUOTATIONS_DB = resolveDB(client, "QUOTATIONS", DB.QUOTATIONS)
+    const stageField    = resolveField(client, "DEAL_STAGE_FIELD", null) || resolveField(client, "STAGE_FIELD", "Stage")
+    const packageField  = resolveField(client, "PACKAGE_FIELD", "Package Type")
+
+    const now   = new Date()
+    const _qm   = req.query.month ? parseInt(req.query.month) - 1 : null  // 1-12 → 0-11
+    const _qy   = req.query.year  ? parseInt(req.query.year)      : null
+    const month = (_qm !== null && !isNaN(_qm)) ? _qm : now.getMonth()
+    const year  = (_qy !== null && !isNaN(_qy)) ? _qy : now.getFullYear()
+    // When a specific month is selected, filter ALL data by Created On
+    const monthFiltered = _qm !== null
+
+    const [deals, proposals, quotations] = await Promise.all([
+      queryDB(DEALS_DB,      null, notionToken),
+      queryDB(PROPOSALS_DB,  null, notionToken).catch(() => []),
+      queryDB(QUOTATIONS_DB, null, notionToken).catch(() => []),
+    ])
+
+    // ── Deals stage breakdown — dynamic via client.labels ─────────────────
+    const DEFAULT_LOST_LABEL  = "Closed-Lost"
+
+    const DEFAULT_ALL_STAGES = [
+      "Proposal","Negotiation","Proposal Sent","Quotation Issued","Awaiting Deposit","Closed-Won","Balance Due","Delivered","Closed-Lost",
+    ]
+    const DEFAULT_POTENTIAL = ["Proposal","Negotiation","Proposal Sent","Quotation Issued","Awaiting Deposit"]
+    const DEFAULT_WON       = ["Closed-Won", "Balance Due", "Delivered"]
+    const DEFAULT_WON_LABEL  = "Closed-Won"
+    const DEFAULT_DEL_LABEL  = "Delivered"
+
+    const ALL_STAGES       = client.labels?.dealAllStages       || DEFAULT_ALL_STAGES
+    const POTENTIAL_STAGES = client.labels?.dealPotentialStages || DEFAULT_POTENTIAL
+    const WON_STAGES       = client.labels?.dealWonStages       || DEFAULT_WON
+    const wonLabel         = client.labels?.dealWonLabel        || DEFAULT_WON_LABEL
+    const deliveredLabel   = client.labels?.dealDeliveredLabel  || DEFAULT_DEL_LABEL
+    const lostLabel        = client.labels?.dealLostLabel       || DEFAULT_LOST_LABEL
+
+    const stages      = Object.fromEntries(ALL_STAGES.map(s => [s, 0]))
+    const stageValues = Object.fromEntries(ALL_STAGES.map(s => [s, 0]))
+
+    let potentialValue     = 0
+    let buildingValue      = 0
+    let wonThisMonth       = 0
+    let deliveredThisMonth = 0
+    let lostThisMonth      = 0
+    let lostValueThisMonth = 0
+    const boardGroups = {}
+    const wonDeals  = []
+    const lostDeals = []
+
+    for (const deal of deals) {
+      const p     = deal.properties
+      const stage = p[stageField]?.status?.name || p[stageField]?.select?.name || "Unknown"
+      const name  = plain(p["Deal Name"]?.title || p.Name?.title || p.Title?.title || []) || "Untitled"
+      const value = p["Deal Value"]?.number || p["Total Value"]?.number || p["Estimated Value"]?.number || p["Value"]?.number || p["Fee"]?.number || p["Contract Value"]?.number || 0
+      const pkg   = p[packageField]?.select?.name || ""
+      const _lrDeal = p["Lost Reason"] || p["Why Not Closing?"] || null
+      const lostReason = _lrDeal?.multi_select?.map(x => x.name).join(", ") || _lrDeal?.select?.name || _lrDeal?.rich_text?.[0]?.plain_text || null
+      const pageUrl    = `https://www.notion.so/${deal.id.replace(/-/g, "")}`
+      const d     = new Date(deal.created_time)
+      const isThisMonth = d.getMonth() === month && d.getFullYear() === year
+
+      // When month filter active, only count deals created in that month
+      const inScope = monthFiltered ? isThisMonth : true
+
+      if (inScope && stage in stages) stages[stage]++
+      if (inScope && stage in stageValues) stageValues[stage] += value
+
+      if (inScope && POTENTIAL_STAGES.includes(stage)) {
+        potentialValue += value
+        if (!boardGroups[stage]) boardGroups[stage] = []
+        boardGroups[stage].push({ name, value, pkg })
+      }
+      if (inScope && WON_STAGES.includes(stage)) {
+        buildingValue += value
+        wonDeals.push({ name, value, stage, pkg, url: pageUrl, created: deal.created_time })
+      }
+      if (inScope && stage === lostLabel) lostDeals.push({ name, value, lostReason, pkg, url: pageUrl, created: deal.created_time })
+      if (isThisMonth && stage === wonLabel)       wonThisMonth++
+      if (isThisMonth && stage === deliveredLabel) deliveredThisMonth++
+      if (isThisMonth && stage === lostLabel)      { lostThisMonth++; lostValueThisMonth += value; }
+    }
+
+    // ── Proposals ──────────────────────────────────────────────────────────
+    const propStats = { total: proposals.length, Draft: 0, "Ready to Send": 0, Sent: 0, Accepted: 0, Rejected: 0 }
+    let propValue = 0
+    for (const p of proposals) {
+      const pr = p.properties
+      const s  = pr.Status?.status?.name || pr.Status?.select?.name || ""
+      if (s === "Draft")            propStats.Draft++
+      else if (s === "Ready to Send") propStats["Ready to Send"]++
+      else if (s === "Sent")        propStats.Sent++
+      else if (s === "Accepted")    propStats.Accepted++
+      else if (s === "Rejected")    propStats.Rejected++
+      propValue += pr.Fee?.number || pr["Total Fee"]?.number || 0
+    }
+
+    // ── Quotations ─────────────────────────────────────────────────────────
+    const quotStats = { total: quotations.length, Draft: 0, Issued: 0, Approved: 0, Rejected: 0 }
+    for (const q of quotations) {
+      const qp = q.properties
+      const s  = qp.Status?.status?.name || qp.Status?.select?.name || ""
+      if (s === "Draft")          quotStats.Draft++
+      else if (s === "Issued")    quotStats.Issued++
+      else if (s === "Approved")  quotStats.Approved++
+      else if (s === "Rejected")  quotStats.Rejected++
+    }
+
+    const board = POTENTIAL_STAGES
+      .filter(s => boardGroups[s])
+      .map(s => ({ stage: s, deals: boardGroups[s] }))
+
+    // ── Dynamic won-stage stats for stat cards ─────────────────────────────
+    // activeWonStages = wonStages minus the delivered stage (delivered = done, not "active")
+    const activeWonStages  = WON_STAGES.filter(s => s !== deliveredLabel)
+    const deliveryStage    = activeWonStages[0] || null   // e.g. "Building" / "Client Active"
+    const balanceStage     = activeWonStages[1] || null   // e.g. "Balance Due" (Opxio only)
+    // Active Deals = only in-progress won stages, not delivered (already month-scoped via stages)
+    const activeDealsCount = activeWonStages.reduce((s, st) => s + (stages[st] || 0), 0)
+
+    // ── Value totals ───────────────────────────────────────────────────────
+    const wonValue  = wonDeals.reduce((s, d) => s + (d.value || 0), 0)
+    const lostValue = lostDeals.reduce((s, d) => s + (d.value || 0), 0)
+
+    res.status(200).json({
+      stages,
+      stageOrder:      ALL_STAGES,
+      potentialStages: POTENTIAL_STAGES,
+      wonStages:       WON_STAGES,
+      board,
+      proposals: { ...propStats, pipelineValue: propValue },
+      quotations: quotStats,
+      potentialValue,
+      buildingValue,
+      wonThisMonth,
+      deliveredThisMonth,
+      // ── Stat card helpers ──
+      totalLostDeals:    stages[lostLabel] || 0,
+      lostThisMonth,
+      lostValueThisMonth,
+      lostLabel,
+      stageValues,
+      wonDeals,
+      lostDeals,
+      activeDealsCount,
+      activeWonStages,
+      deliveryStage,
+      deliveryCount: deliveryStage ? (stages[deliveryStage] || 0) : 0,
+      balanceStage,
+      balanceCount:  balanceStage  ? (stages[balanceStage]  || 0) : 0,
+      wonValue,
+      lostValue,
+    })
+  } catch (err) {
+    console.error("deals:", err)
+    res.status(500).json({ error: err.message })
+  }
+}

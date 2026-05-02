@@ -1,11 +1,11 @@
 import { Router } from 'express'
 
-import { handler as generate } from '../handlers/generate.js'
-import { handler as createProposal } from '../handlers/create_proposal.js'
-import { handler as acceptProposal } from '../handlers/accept_proposal.js'
-import { handler as convertProposal } from '../handlers/convert_proposal.js'
-import { handler as sendQuotation } from '../handlers/send_quotation.js'
-import { handler as waRedirect } from '../handlers/wa_redirect.js'
+import { handler as generate } from '../handlers/documents/generate.js'
+import { handler as createProposal } from '../handlers/documents/create_proposal.js'
+import { handler as acceptProposal } from '../handlers/documents/accept_proposal.js'
+import { handler as convertProposal } from '../handlers/documents/convert_proposal.js'
+import { handler as sendQuotation } from '../handlers/documents/send_quotation.js'
+import { handler as waRedirect } from '../handlers/documents/wa_redirect.js'
 
 const router = Router()
 

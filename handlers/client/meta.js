@@ -1,4 +1,4 @@
-import { getClientConfig } from '@/lib/supabase'
+import { getClientConfig } from '../../lib/supabase.js'
 
 // Returns client config (no Notion data) — used by the dashboard page
 // to know which widgets to render and what labels to show.

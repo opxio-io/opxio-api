@@ -14,7 +14,7 @@
 // To edit tasks: update config/tasks.json — no Notion DB changes needed.
 
 import { getPage, patchPage, createPage, plain, queryDB, DB } from "../lib/notion.js"
-import taskConfig from "../config/tasks.json" assert { type: "json" }
+import taskConfig from "../config/tasks.json" with { type: "json" }
 
 // ─── Scope key mapping ───────────────────────────────────────────────────────
 // Maps Notion "OS Scope" multi_select values → internal scope keys in tasks.json

@@ -1,6 +1,6 @@
 // GET /api/portal/data?token=xxx
 import { createClient as createSupabaseClient } from "@supabase/supabase-js"
-import { getPage, queryDB, plain, DB } from '../../../lib/notion'
+import { getPage, queryDB, plain, DB } from '../../lib/notion.js'
 
 // Tasks with these keywords are internal — never show to client
 const INTERNAL_KEYWORDS = [

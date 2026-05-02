@@ -2,9 +2,9 @@
 // Returns Deals DB stage breakdown + Proposals + Quotations counts
 // Used by: potential.html (pre-won stages), won.html (Building → Delivered)
 
-import { queryDB, plain, DB } from "../../../lib/notion"
-import { getClientByToken, getNotionToken, resolveDB, resolveField, checkOrigin } from "../../../lib/supabase"
-import { DEALS } from "../../../lib/demo-fixtures"
+import { queryDB, plain, DB } from "../../lib/notion.js"
+import { getClientByToken, getNotionToken, resolveDB, resolveField, checkOrigin } from "../../lib/supabase.js"
+import { DEALS } from "../../lib/demo-fixtures.js"
 
 export async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end()

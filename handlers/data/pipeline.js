@@ -2,9 +2,9 @@
 // Queries the Leads DB (client funnel)
 // Stages are fully dynamic — driven by client.labels in Supabase
 
-import { queryDB, plain, DB } from "../../../lib/notion"
-import { getClientByToken, getNotionToken, resolveDB, resolveField, checkOrigin } from "../../../lib/supabase"
-import { PIPELINE } from "../../../lib/demo-fixtures"
+import { queryDB, plain, DB } from "../../lib/notion.js"
+import { getClientByToken, getNotionToken, resolveDB, resolveField, checkOrigin } from "../../lib/supabase.js"
+import { PIPELINE } from "../../lib/demo-fixtures.js"
 
 export async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end()

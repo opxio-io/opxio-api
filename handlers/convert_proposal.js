@@ -16,7 +16,7 @@
 //
 // NOTE: Proposals DB has no inline Products DB. Products are sourced from Catalogue.
 
-import { getPage, patchPage, createPage, queryDB, plain, DB } from "../../lib/notion"
+import { getPage, patchPage, createPage, queryDB, plain, DB } from "../lib/notion.js"
 
 function hdrs() {
   return {

@@ -2,9 +2,9 @@
 // Resolves client by access_token → uses their Notion key + DB IDs
 // Called by widgets: revenue.html, earnings.html, monthly.html, topproducts.html
 
-import { queryDB, plain, getProp, DB } from "../../../lib/notion"
-import { getClientByToken, getNotionToken, resolveDB, resolveField, checkOrigin } from "../../../lib/supabase"
-import { FINANCE } from "../../../lib/demo-fixtures"
+import { queryDB, plain, getProp, DB } from "../../lib/notion.js"
+import { getClientByToken, getNotionToken, resolveDB, resolveField, checkOrigin } from "../../lib/supabase.js"
+import { FINANCE } from "../../lib/demo-fixtures.js"
 
 export async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end()

@@ -5,7 +5,7 @@
 // Returns: { allowed: true } or { allowed: false }
 // Never reveals WHY access is denied.
 
-import { getClientByToken, hasWidgetAccess } from "../../lib/supabase"
+import { getClientByToken, hasWidgetAccess } from "../lib/supabase.js"
 
 export async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');

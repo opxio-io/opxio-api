@@ -5,7 +5,7 @@
  * No passwords or hashes exposed.
  * Query: ?token=<client_access_token>
  */
-import { getClientByToken } from "../../../lib/supabase"
+import { getClientByToken } from "../../lib/supabase.js"
 
 export async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*")

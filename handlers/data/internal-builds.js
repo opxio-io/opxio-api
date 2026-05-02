@@ -1,7 +1,7 @@
 // /api/data/internal-builds — Opxio internal use only
 // GET: Returns internal build counts and build list with task summaries
-import { queryDB, plain } from "../../../lib/notion"
-import { getClientByToken } from "../../../lib/supabase"
+import { queryDB, plain } from "../../lib/notion.js"
+import { getClientByToken } from "../../lib/supabase.js"
 
 const INTERNAL_BUILDS_DB    = "0668c442d6ec4b848ed732236236ad5c"
 const INTERNAL_BUILD_TASKS_DB = "e681e30141714b5da312a0f418cccf98"

@@ -9,9 +9,9 @@
 //
 // Returns: { authorized: bool, data: [...], module: string, cached: bool }
 
-import { getClientConfig, resolveDB, resolveField } from "../../../lib/supabase"
-import { queryDB, plain, getProp }                  from "../../../lib/notion"
-import { cacheGet, cacheSet, cacheKey }             from "../../../lib/cache"
+import { getClientConfig, resolveDB, resolveField } from "../../lib/supabase.js"
+import { queryDB, plain, getProp }                  from "../../lib/notion.js"
+import { cacheGet, cacheSet, cacheKey }             from "../../lib/cache.js"
 
 // ── Module → standard DB key map ──────────────────────────────────────────
 // These are the keys clients use in their `databases` JSON column in Supabase.

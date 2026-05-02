@@ -3,7 +3,7 @@
 // Triggered by Notion button "Send to Client".
 // Builds WA URL, writes it to Quotation.WA Link, sets Status → Issued.
 
-import { getPage, queryDB, patchPage, plain, DB } from "../../lib/notion"
+import { getPage, queryDB, patchPage, plain, DB } from "../lib/notion.js"
 
 
 function cleanPhone(phone = "") {

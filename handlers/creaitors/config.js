@@ -6,7 +6,7 @@
 // All other label keys are preserved on every write.
 
 import { createClient } from '@supabase/supabase-js'
-import { getClientByToken } from '../../../lib/supabase'
+import { getClientByToken } from '../../lib/supabase.js'
 
 const VALID_SECTIONS = ['campaign', 'content', 'crm', 'crm-log', 'kol']
 const DEFAULT_SECTIONS = ['campaign', 'content']

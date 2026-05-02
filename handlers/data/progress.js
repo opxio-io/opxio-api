@@ -1,8 +1,8 @@
 // /api/data/progress — Project completion progress
 // GET ?project=<project_page_id>
 // Returns phase & task completion data + active tasks with assignees
-import { getPage, queryDB, plain, DB } from "../../../lib/notion"
-import { PROGRESS } from "../../../lib/demo-fixtures"
+import { getPage, queryDB, plain, DB } from "../../lib/notion.js"
+import { PROGRESS } from "../../lib/demo-fixtures.js"
 
 export async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end()

@@ -2,8 +2,8 @@
 // GET  — fetch proposal data from Notion
 // PATCH — save edited fields back to Notion
 
-import { getPage, patchPage, plain } from "../../../lib/notion"
-import { fetchProposalData } from "../../../lib/pdf"
+import { getPage, patchPage, plain } from "../../lib/notion.js"
+import { fetchProposalData } from "../../lib/pdf.js"
 
 export async function handler(req, res) {
   const rawId = req.query.id

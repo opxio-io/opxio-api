@@ -10,7 +10,7 @@
 // 6. Returns { invoice_id, project_id }
 
 import { waitUntil } from "@vercel/functions"
-import { getPage, patchPage, createPage, queryDB, plain, DB, getCurrency, hdrs, createTeamTask } from "../../lib/notion"
+import { getPage, patchPage, createPage, queryDB, plain, DB, getCurrency, hdrs, createTeamTask } from "../lib/notion.js"
 
 
 // ── Find inline Products & Services DB on a page (checks callouts too) ──

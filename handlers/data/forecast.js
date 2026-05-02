@@ -2,8 +2,8 @@
 // Queries Deals DB + Invoice DB + Leads DB in parallel
 // Returns pipeline summary, revenue collected, conversion stats, monthly trends
 
-import { queryDB, plain, DB } from "../../../lib/notion"
-import { getClientByToken, getNotionToken, resolveDB, checkOrigin } from "../../../lib/supabase"
+import { queryDB, plain, DB } from "../../lib/notion.js"
+import { getClientByToken, getNotionToken, resolveDB, checkOrigin } from "../../lib/supabase.js"
 
 const PIPELINE_STAGES = ["Proposal", "Proposal Sent", "Negotiation"]
 const WON_STAGES      = ["Awaiting Deposit", "Closed Won"]

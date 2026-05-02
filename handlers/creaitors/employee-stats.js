@@ -2,7 +2,7 @@
 // Returns per-employee task data with raw task list so the widget
 // can slice any week client-side without re-fetching.
 
-import { getClientByToken, getNotionToken, resolveDB } from "../../../lib/supabase"
+import { getClientByToken, getNotionToken, resolveDB } from "../../lib/supabase.js"
 
 function getStage(taskName) {
   const n = (taskName || '').toLowerCase();

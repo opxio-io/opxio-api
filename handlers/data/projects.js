@@ -1,9 +1,9 @@
 // /api/data/projects — token-authenticated
 // GET: Returns project counts, active builds with per-phase task breakdowns
 // POST: Task actions (start_task, complete_task)
-import { queryDB, plain, hdrs, patchPage, DB } from "../../../lib/notion"
-import { getClientByToken, getNotionToken, resolveDB, resolveField, checkOrigin } from "../../../lib/supabase"
-import { PROJECTS, PROJECTS_GANTT, PROJECTS_TEAM } from "../../../lib/demo-fixtures"
+import { queryDB, plain, hdrs, patchPage, DB } from "../../lib/notion.js"
+import { getClientByToken, getNotionToken, resolveDB, resolveField, checkOrigin } from "../../lib/supabase.js"
+import { PROJECTS, PROJECTS_GANTT, PROJECTS_TEAM } from "../../lib/demo-fixtures.js"
 
 function actionHTML(title, msg, ok) {
   const bg = ok ? "#0a0a0a" : "#1a0a0a"

@@ -2,7 +2,7 @@
 // Queries Monthly Campaigns DB for active campaign metrics
 // Environment variables: NOTION_API_KEY
 
-import { getClientByToken, getNotionToken, resolveDB } from "../../../lib/supabase"
+import { getClientByToken, getNotionToken, resolveDB } from "../../lib/supabase.js"
 
 
 export async function handler(req, res) {

@@ -1,8 +1,8 @@
 // /api/data/settings — token-authenticated, Opxio internal
 // Returns all Settings & Configuration records grouped by Category
 
-import { queryDB, plain, DB } from "../../../lib/notion"
-import { getClientByToken, getNotionToken, resolveDB, checkOrigin } from "../../../lib/supabase"
+import { queryDB, plain, DB } from "../../lib/notion.js"
+import { getClientByToken, getNotionToken, resolveDB, checkOrigin } from "../../lib/supabase.js"
 
 export async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end()

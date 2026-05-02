@@ -2,7 +2,7 @@
 // GET — returns all proposals from the Proposals DB for the index page
 // Fetches company names in parallel to avoid N+1 on the frontend
 
-import { queryDB, getPage, plain, getProp, DB, hdrs } from "../../../lib/notion"
+import { queryDB, getPage, plain, getProp, DB, hdrs } from "../../lib/notion.js"
 
 export async function handler(req, res) {
   if (req.method !== "GET") return res.status(405).end()

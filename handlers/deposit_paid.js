@@ -2,7 +2,7 @@
 // POST /api/deposit_paid   { "page_id": "<invoice_page_id>" }
 // Triggered by Notion button "Mark Deposit Paid" on Invoice page.
 
-import { getPage, patchPage, createPage, queryDB, plain, DB, createLedgerEntry, hdrs, createTeamTask } from "../../lib/notion"
+import { getPage, patchPage, createPage, queryDB, plain, DB, createLedgerEntry, hdrs, createTeamTask } from "../lib/notion.js"
 import { waitUntil } from "@vercel/functions"
 import { createClient as createSupabaseClient } from "@supabase/supabase-js"
 import crypto from "crypto"

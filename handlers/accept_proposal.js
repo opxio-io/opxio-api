@@ -18,7 +18,7 @@
 //      → Invoice + Project created automatically
 
 import { waitUntil } from "@vercel/functions"
-import { getPage, patchPage, createPage, queryDB, plain, DB } from "../../lib/notion"
+import { getPage, patchPage, createPage, queryDB, plain, DB } from "../lib/notion.js"
 
 function hdrs() {
   return {

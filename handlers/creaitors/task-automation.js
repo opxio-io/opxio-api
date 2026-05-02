@@ -2,7 +2,7 @@
 // POST body: { action: "start" | "submit_qc" | "approve_qc" | "complete", page_id: "..." }
 // Token via ?token= query param or x-widget-token header
 
-import { getClientByToken, getNotionToken, resolveDB } from "../../../lib/supabase"
+import { getClientByToken, getNotionToken, resolveDB } from "../../lib/supabase.js"
 
 function formatDuration(minutes) {
   minutes = Math.abs(Math.round(minutes));

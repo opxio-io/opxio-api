@@ -2,7 +2,7 @@
 // Updates a Catalogue item in Notion. Only callable with the Opxio master token.
 // Supports updating: Price, Price Max, Monthly Fee, Description, Status, Tier, Available To, Order
 
-import { getClientByToken } from "../../../lib/supabase"
+import { getClientByToken } from "../../lib/supabase.js"
 
 const CATALOGUE_DB = "0acfe60097f682568935013f42a876f9"
 const OPXIO_TOKEN  = "04524d18e8ef8f862b64d497e4c6cc52a7991d96029c71546939b5e3ec428edf"

@@ -11,7 +11,7 @@
 //   4. Update Client Account → append OS Installed + link new Client Build
 //   5. Update Expansion record → Status: In Progress + Client Build relation
 
-import { getPage, patchPage, createPage, queryDB, plain, DB, createTeamTask } from "../../lib/notion"
+import { getPage, patchPage, createPage, queryDB, plain, DB, createTeamTask } from "../lib/notion.js"
 
 const API_URL = "https://api.opxio.io"
 

@@ -2,7 +2,7 @@
 // Queries Sales CRM - Pipeline for active leads, follow-ups, won/lost
 // Environment variables: NOTION_API_KEY, NOTION_DATABASE_ID
 
-import { getClientByToken, getNotionToken, resolveDB } from "../../../lib/supabase"
+import { getClientByToken, getNotionToken, resolveDB } from "../../lib/supabase.js"
 
 
 export async function handler(req, res) {

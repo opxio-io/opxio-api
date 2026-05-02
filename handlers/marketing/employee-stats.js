@@ -2,7 +2,7 @@
 // Queries Tasks DB only (already shared with integration),
 // fetches individual employee pages by ID, groups stats per employee.
 
-import { getClientByToken, getNotionToken, resolveDB, resolveField, resolveLabel } from "../../../lib/supabase"
+import { getClientByToken, getNotionToken, resolveDB, resolveField, resolveLabel } from "../../lib/supabase.js"
 
 
 export async function handler(req, res) {

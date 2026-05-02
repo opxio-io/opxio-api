@@ -3,7 +3,7 @@
 // (Planning / Shooting / Editing / Posting) with accumulated duration,
 // filterable by week / month / all time.
 
-import { getClientByToken, getNotionToken, resolveDB, resolveField, resolveLabel } from "../../../lib/supabase"
+import { getClientByToken, getNotionToken, resolveDB, resolveField, resolveLabel } from "../../lib/supabase.js"
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

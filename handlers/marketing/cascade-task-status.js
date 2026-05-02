@@ -5,7 +5,7 @@
 // Only affects tasks linked to the same Content Production page — not globally
 // Environment variables: NOTION_API_KEY
 
-import { getClientByToken, getNotionToken, resolveDB } from "../../../lib/supabase"
+import { getClientByToken, getNotionToken, resolveDB } from "../../lib/supabase.js"
 
 
 function formatDuration(minutes) {

@@ -14,7 +14,7 @@
 //   → Open Add-on record → pick Catalogue Item → Base Price auto-fills
 //   → Fill Quotation line items → Approve → invoice pipeline runs
 
-import { getPage, createPage, plain, DB, hdrs } from "../../lib/notion"
+import { getPage, createPage, plain, DB, hdrs } from "../lib/notion.js"
 
 // ── Detect source page and extract all needed relations ───────────────────
 async function resolveSourcePage(pageId, token) {

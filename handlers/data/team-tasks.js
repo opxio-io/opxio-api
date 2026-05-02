@@ -1,7 +1,7 @@
 // /api/data/team-tasks — Opxio internal cross-OS operations task hub
 // GET: Returns task counts + active tasks + completed tasks with cross-OS context
-import { queryDB, plain, hdrs } from "../../../lib/notion"
-import { getClientByToken } from "../../../lib/supabase"
+import { queryDB, plain, hdrs } from "../../lib/notion.js"
+import { getClientByToken } from "../../lib/supabase.js"
 
 const TEAM_TASKS_DB = "345fe60097f6813da7a1c9087fb3a441"
 

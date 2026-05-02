@@ -1,7 +1,7 @@
 // Vercel Serverless Function — Content Production Stats
 // Returns broad overview stats for the stat card widget
 
-import { getClientByToken, getNotionToken, resolveDB } from "../../../lib/supabase"
+import { getClientByToken, getNotionToken, resolveDB } from "../../lib/supabase.js"
 
 
 export async function handler(req, res) {

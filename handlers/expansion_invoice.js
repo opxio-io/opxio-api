@@ -9,7 +9,7 @@
 // 5. Auto-generates Supplementary Invoice PDF
 // 6. Updates Expansion status → Proposal Sent
 
-import { getPage, patchPage, createPage, plain, DB } from "../../lib/notion"
+import { getPage, patchPage, createPage, plain, DB } from "../lib/notion.js"
 
 const API_URL = process.env.NEXT_PUBLIC_BASE_URL || "https://api.opxio.io"
 

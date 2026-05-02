@@ -2,8 +2,8 @@
 // Returns all active Catalogue items from the Opxio master Notion workspace
 // Token must resolve to a valid client via Supabase (Opxio internal token works)
 
-import { queryDB, plain } from "../../../lib/notion"
-import { getClientByToken } from "../../../lib/supabase"
+import { queryDB, plain } from "../../lib/notion.js"
+import { getClientByToken } from "../../lib/supabase.js"
 
 const CATALOGUE_DB = "0acfe60097f682568935013f42a876f9"
 

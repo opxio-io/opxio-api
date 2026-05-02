@@ -1,7 +1,7 @@
 // ─── wa_redirect.js ────────────────────────────────────────────────────────
 // GET /api/wa_redirect?page_id=<quotation_page_id>
 
-import { getPage, queryDB, plain, getProp, DB } from "../../lib/notion"
+import { getPage, queryDB, plain, getProp, DB } from "../lib/notion.js"
 
 function cleanPhone(phone = "") {
   const digits = phone.replace(/\D/g, "")

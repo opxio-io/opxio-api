@@ -10,11 +10,11 @@ import { waitUntil } from "@vercel/functions"
 import {
   fetchQuotationData, fetchInvoiceData, fetchProposalData,
   generateQuotationPdf, generateInvoicePdf, generateReceiptPdf
-} from "../../lib/pdf"
-import { OS_DEFAULT_MODULES, OS_DEFAULT_ADDONS_LATER, renderProposal } from "../../lib/proposal_template"
-import { htmlToPdf } from "../../lib/puppeteer"
-import { uploadBlob } from "../../lib/blob"
-import { patchPage, getPage, queryDB, plain, fetchCompanyDetails, DB } from "../../lib/notion"
+} from "../lib/pdf.js"
+import { OS_DEFAULT_MODULES, OS_DEFAULT_ADDONS_LATER, renderProposal } from "../lib/proposal_template.js"
+import { htmlToPdf } from "../lib/puppeteer.js"
+import { uploadBlob } from "../lib/blob.js"
+import { patchPage, getPage, queryDB, plain, fetchCompanyDetails, DB } from "../lib/notion.js"
 
 export const config = {
   api: { responseLimit: false },

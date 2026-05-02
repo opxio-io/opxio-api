@@ -2,7 +2,7 @@
 // Personal weight loss milestone tracker — Kai's private widget
 // DBs: Weight Log · Milestones · Reward Menu (all in Opxio workspace)
 
-import { queryDB, plain } from "../../../lib/notion"
+import { queryDB, plain } from "../../lib/notion.js"
 
 const WEIGHT_LOG_DB  = "43b574d8273a4ac3ac101e9eddcac4e6"
 const MILESTONES_DB  = "9ee6834c98d94ecc92ae38679fd65378"

@@ -1,7 +1,7 @@
 // /api/private/log-weight
 // Logs a new weight entry to the Weight Log DB
 
-import { createPage, hdrs } from "../../../lib/notion"
+import { createPage, hdrs } from "../../lib/notion.js"
 
 const WEIGHT_LOG_DB = "43b574d8273a4ac3ac101e9eddcac4e6"
 

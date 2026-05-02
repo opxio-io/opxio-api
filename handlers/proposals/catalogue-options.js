@@ -2,7 +2,7 @@
 // GET — returns OS types from Catalogue DB for the proposal editor dropdown.
 // Internal use only — no client auth required.
 
-import { fetchCatalogueForProposal } from "../../../lib/catalogue"
+import { fetchCatalogueForProposal } from "../../lib/catalogue.js"
 
 export async function handler(req, res) {
   if (req.method !== "GET") return res.status(405).end()

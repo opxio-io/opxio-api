@@ -12,7 +12,7 @@
  *   401 { error: "wrong_password" }
  *   400 { error: "password_too_short" } (min 6 chars)
  */
-import { getClientByToken, invalidateClientCache } from "../../../lib/supabase"
+import { getClientByToken, invalidateClientCache } from "../../lib/supabase.js"
 import { createClient } from "@supabase/supabase-js"
 import bcrypt from "bcryptjs"
 import crypto from "crypto"

@@ -1,7 +1,7 @@
 // /api/data/meetings — token-authenticated
-import { queryDB, plain, DB } from "../../../lib/notion"
-import { getClientByToken, getNotionToken, resolveDB, resolveField, checkOrigin } from "../../../lib/supabase"
-import { MEETINGS } from "../../../lib/demo-fixtures"
+import { queryDB, plain, DB } from "../../lib/notion.js"
+import { getClientByToken, getNotionToken, resolveDB, resolveField, checkOrigin } from "../../lib/supabase.js"
+import { MEETINGS } from "../../lib/demo-fixtures.js"
 
 export async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end()

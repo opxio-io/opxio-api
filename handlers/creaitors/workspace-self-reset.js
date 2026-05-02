@@ -11,7 +11,7 @@
  *   401 { error: "wrong_code" }
  *   400 { error: "no_backup_code" } — staff hasn't set one yet (never completed first login)
  */
-import { invalidateClientCache } from "../../../lib/supabase"
+import { invalidateClientCache } from "../../lib/supabase.js"
 import { createClient } from "@supabase/supabase-js"
 import bcrypt from "bcryptjs"
 import crypto from "crypto"

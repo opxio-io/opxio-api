@@ -9,7 +9,7 @@
 // 5. Updates Project status → In Review
 // 6. Advances Lead stage → Pending Final Payment
 
-import { getPage, patchPage, createPage, getCurrency, plain, DB, queryDB, createLedgerEntry, createTeamTask } from "../../lib/notion"
+import { getPage, patchPage, createPage, getCurrency, plain, DB, queryDB, createLedgerEntry, createTeamTask } from "../lib/notion.js"
 
 
 // ── Notion API headers ─────────────────────────────────────────────────────

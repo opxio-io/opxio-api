@@ -1,7 +1,7 @@
 // /api/data/settings-update — Opxio internal only
 // Updates the Value field on a Settings & Configuration record
 
-import { getClientByToken, getNotionToken, checkOrigin } from "../../../lib/supabase"
+import { getClientByToken, getNotionToken, checkOrigin } from "../../lib/supabase.js"
 
 const NOTION_API     = "https://api.notion.com/v1"
 const NOTION_VERSION = "2022-06-28"

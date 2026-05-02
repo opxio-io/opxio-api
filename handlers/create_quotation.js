@@ -10,7 +10,7 @@
 //
 // DBs: Quotations, Leads CRM, Companies, Catalogue (Products)
 
-import { getPage, patchPage, createPage, queryDB, plain, DB, getCurrency } from "../../lib/notion"
+import { getPage, patchPage, createPage, queryDB, plain, DB, getCurrency } from "../lib/notion.js"
 
 
 function hdrs() {

@@ -12,7 +12,7 @@
 // 6. Enriches Company: Industry, Team Size, Country, Billing Currency
 // 7. Marks Contact as Primary Contact, ensures Company relation is set
 
-import { getPage, patchPage, createPage, plain, DB, createTeamTask } from "../../lib/notion"
+import { getPage, patchPage, createPage, plain, DB, createTeamTask } from "../lib/notion.js"
 
 // ─── Catalogue page IDs for each OS (OS Type relation in Deals) ────────────
 const CATALOGUE_OS_IDS = {

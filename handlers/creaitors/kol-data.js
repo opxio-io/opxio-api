@@ -2,7 +2,7 @@
 // Fetches KOL & Talent Directory + Influencer Campaign records
 // Used by the HOM (Head of Marketing) view in the enhanced dashboard
 
-import { getClientByToken, getNotionToken, resolveDB } from "../../../lib/supabase"
+import { getClientByToken, getNotionToken, resolveDB } from "../../lib/supabase.js"
 
 export async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')

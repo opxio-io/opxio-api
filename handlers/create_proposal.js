@@ -12,7 +12,7 @@
 //   5. Auto-populates line items (Base OS → Main OS → Add-Ons, sequential)
 //   6. Advances Lead stage → "Proposal Sent"
 
-import { getPage, patchPage, createPage, queryDB, plain, DB } from "../../lib/notion"
+import { getPage, patchPage, createPage, queryDB, plain, DB } from "../lib/notion.js"
 
 function hdrs() {
   return {

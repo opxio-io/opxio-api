@@ -9,7 +9,7 @@
  * 5. Returns { qualified: bool, reason?: string }
  */
 
-import { createTeamTask } from "../../lib/notion"
+import { createTeamTask } from "../lib/notion.js"
 
 const NOTION_KEY = process.env.NOTION_API_KEY;
 const NOTION_VERSION = "2022-06-28";

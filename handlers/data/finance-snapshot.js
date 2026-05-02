@@ -3,9 +3,9 @@
 // KPIs: income this month, expenses this month, net P&L this month
 // Charts: expense breakdown by category (donut), 6-month net P&L trend (single line)
 
-import { queryDB, DB } from "../../../lib/notion"
-import { getClientByToken, getNotionToken, resolveDB, checkOrigin } from "../../../lib/supabase"
-import { FINANCE_SNAPSHOT } from "../../../lib/demo-fixtures"
+import { queryDB, DB } from "../../lib/notion.js"
+import { getClientByToken, getNotionToken, resolveDB, checkOrigin } from "../../lib/supabase.js"
+import { FINANCE_SNAPSHOT } from "../../lib/demo-fixtures.js"
 
 export async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end()

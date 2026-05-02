@@ -1,8 +1,8 @@
 // /api/data/accounts — token-authenticated
 // Queries the Client Accounts DB and returns status counts, health breakdown, and client list
 
-import { queryDB, plain, DB } from "../../../lib/notion"
-import { getClientByToken, getNotionToken, resolveDB, checkOrigin } from "../../../lib/supabase"
+import { queryDB, plain, DB } from "../../lib/notion.js"
+import { getClientByToken, getNotionToken, resolveDB, checkOrigin } from "../../lib/supabase.js"
 
 export async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end()

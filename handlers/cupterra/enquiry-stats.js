@@ -1,7 +1,7 @@
 // pages/api/cupterra/enquiry-stats.js
 // 4-tile CRM dashboard for cupTerra / Shin Supplies
 
-import { getClientByToken, getNotionToken, resolveDB } from "../../../lib/supabase"
+import { getClientByToken, getNotionToken, resolveDB } from "../../lib/supabase.js"
 
 const ENQUIRY_DB_DEFAULT = '71c9ba4af0694291876bf78422805f18'
 const PEOPLE_DB_DEFAULT  = '34cfe60097f680e1bac0e75b431bc325'

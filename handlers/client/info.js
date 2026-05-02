@@ -2,8 +2,8 @@
 // Returns basic client identity for widgets (client name, slug).
 // Called by widgets on load to set the eyebrow without needing ?client= in the URL.
 
-import { getClientByToken } from '../../../lib/supabase'
-import { CLIENT_INFO } from '../../../lib/demo-fixtures'
+import { getClientByToken } from '../../lib/supabase.js'
+import { CLIENT_INFO } from '../../lib/demo-fixtures.js'
 
 export async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')

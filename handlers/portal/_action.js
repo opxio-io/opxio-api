@@ -2,7 +2,7 @@
 // GET  /api/portal/download?type=invoice|receipt&id=xxx
 // Token validated via Supabase clients table
 
-import { getPage, createPage, plain, DB } from '../../../lib/notion'
+import { getPage, createPage, plain, DB } from '../../lib/notion.js'
 import { createClient as createSupabaseClient } from "@supabase/supabase-js"
 
 async function getProjectIdFromToken(portalToken) {

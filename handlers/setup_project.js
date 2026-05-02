@@ -13,7 +13,7 @@
 //
 // To edit tasks: update config/tasks.json — no Notion DB changes needed.
 
-import { getPage, patchPage, createPage, plain, queryDB, DB } from "../../lib/notion"
+import { getPage, patchPage, createPage, plain, queryDB, DB } from "../lib/notion.js"
 import taskConfig from "../../config/tasks.json"
 
 // ─── Scope key mapping ───────────────────────────────────────────────────────

@@ -9,7 +9,7 @@
 // X-Cache header: HIT | STALE | MISS
 
 import { getClientByToken, getNotionToken, resolveDB } from "../../../lib/supabase.js"
-import { cacheGet, cacheSet, cacheKey }                from "../../../lib/cache.js"
+import { cacheGet, cacheSet, cacheKey, cacheDelete }    from "../../../lib/cache.js"
 import { notionQueue }                                  from "../../../lib/queue.js"
 import { createClient }                                 from "@supabase/supabase-js"
 
@@ -202,9 +202,12 @@ function buildFetchPromise(ck, notionKey, enquiryDb, peopleDb) {
     for (const person of people) {
       const nameProp = person.properties['Name'] || person.properties['Nama'] || person.properties['Full Name']
       const roleProp = person.properties['Role'] || person.properties['role'] || person.properties['Position']
-      const role = getStatus(roleProp) || getTitle(roleProp)
-      // Only include Sales Person role in rep breakdown
-      if (role && role.toLowerCase() !== 'sales person') continue
+      // Role is multi_select — use getMultiSel(); fall back to select/status for older schemas
+      const roleArr = getMultiSel(roleProp)
+      const roleSingle = getStatus(roleProp) || getTitle(roleProp)
+      const roleNames = roleArr.length > 0 ? roleArr : (roleSingle ? [roleSingle] : [])
+      // Only include Sales Person role; if no Role set, include by default
+      if (roleNames.length > 0 && !roleNames.some(r => r.toLowerCase() === 'sales person')) continue
       const name = getTitle(nameProp)
       if (name) { repMap[person.id] = name; repMap[person.id.replace(/-/g, '')] = name }
     }
@@ -221,6 +224,7 @@ export async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
   if (req.method === 'OPTIONS') return res.status(200).end()
 
   const t0    = Date.now()
@@ -238,7 +242,12 @@ export async function handler(req, res) {
   const mEnd   = new Date(mYear, mMon + 1, 1)
 
   const ck         = cacheKey('shin-supplies:crm-pipeline', client.id)
-  const hit        = cacheGet(ck)
+  const forceRefresh = req.query.force === '1'
+  if (forceRefresh) {
+    cacheDelete(ck)
+    console.log('[crm-pipeline] force refresh requested — cache cleared')
+  }
+  const hit        = forceRefresh ? null : cacheGet(ck)
   const notionKey  = getNotionToken(client)
   const enquiryDb  = resolveDB(client, 'enquiry_submissions', ENQUIRY_DB_DEFAULT)
   const peopleDb   = resolveDB(client, 'people', PEOPLE_DB_DEFAULT)

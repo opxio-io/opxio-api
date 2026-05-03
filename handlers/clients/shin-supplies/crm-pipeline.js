@@ -50,8 +50,8 @@ function logUsage({ clientId, cacheStatus, latencyMs, httpStatus = 200, error = 
   })
 }
 
-// ── Notion paginator — queued + timeout ──────────────────────────────────
-async function queryAll(dbId, notionKey) {
+// ── Notion paginator — queued + timeout + optional date filter ────────────
+async function queryAll(dbId, notionKey, filter = null) {
   const headers = {
     Authorization:    `Bearer ${notionKey}`,
     'Notion-Version': '2022-06-28',
@@ -64,6 +64,7 @@ async function queryAll(dbId, notionKey) {
     try {
       const body = { page_size: 100 }
       if (cursor) body.start_cursor = cursor
+      if (filter)  body.filter      = filter
       // Each page fetch goes through the shared Notion queue (max 3 concurrent)
       const d = await notionQueue.add(async () => {
         const r = await fetch(`https://api.notion.com/v1/databases/${dbId}/query`, {
@@ -80,6 +81,17 @@ async function queryAll(dbId, notionKey) {
     }
   }
   return results
+}
+
+// 13-month cutoff — enough for current month + 12 months back navigation
+function leadsDateFilter() {
+  const d = new Date()
+  d.setMonth(d.getMonth() - 13)
+  d.setDate(1)
+  return {
+    property: 'Submitted At',
+    date: { on_or_after: d.toISOString().slice(0, 10) },
+  }
 }
 
 // ── Property getters ──────────────────────────────────────────────────────
@@ -175,7 +187,7 @@ function computeStats({ pages, repMap, mStart, mEnd, now }) {
 function buildFetchPromise(ck, notionKey, enquiryDb, peopleDb) {
   if (_inflight.has(ck)) return _inflight.get(ck)
   const p = Promise.all([
-    queryAll(enquiryDb, notionKey),
+    queryAll(enquiryDb, notionKey, leadsDateFilter()),
     queryAll(peopleDb,  notionKey).catch(() => []),
   ]).then(([pages, people]) => {
     const repMap = {}

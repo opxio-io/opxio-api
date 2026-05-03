@@ -184,28 +184,37 @@ export async function handler(req, res) {
   const mEnd   = new Date(mYear, mMon + 1, 1)
 
   try {
-    // ── Cache: full page set keyed by client, independent of month ──
+    // ── Cache: stale-while-revalidate ──────────────────────────────────────
+    // Serve stale data instantly, refresh in background. Month switching = no wait.
     const ck = cacheKey('shin-supplies:crm-pipeline', client.id)
-    let cached = cacheGet(ck)
+    const hit = cacheGet(ck)
 
-    if (!cached) {
+    async function fetchFresh() {
       const [pages, people] = await Promise.all([
         queryAll(ENQUIRY_DB, NOTION_KEY),
         queryAll(PEOPLE_DB, NOTION_KEY).catch(() => []),
       ])
-
       const repMap = {}
       for (const p of people) {
         const nameProp = p.properties['Name'] || p.properties['Nama'] || p.properties['Full Name']
         const name = getTitle(nameProp)
-        if (name) {
-          repMap[p.id] = name
-          repMap[p.id.replace(/-/g, '')] = name
-        }
+        if (name) { repMap[p.id] = name; repMap[p.id.replace(/-/g, '')] = name }
       }
+      const fresh = { pages, repMap, total: pages.length }
+      cacheSet(ck, fresh)
+      return fresh
+    }
 
-      cached = { pages, repMap, total: pages.length }
-      cacheSet(ck, cached)
+    let cached
+    if (!hit) {
+      // Hard miss — must fetch before responding
+      cached = await fetchFresh()
+    } else {
+      cached = hit.data
+      if (hit.stale) {
+        // Stale — respond immediately with old data, refresh in background
+        fetchFresh().catch(e => console.error('bg refresh error:', e.message))
+      }
     }
 
     const stats = computeStats({ ...cached, mStart, mEnd, now })

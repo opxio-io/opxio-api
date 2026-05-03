@@ -1,6 +1,5 @@
 // Vercel Serverless Function — Staff Task Breakdown
 // Queries EMPLOYEE_DB for Active staff, then maps Done tasks by type
-  const ck = `creaitors:mkt-staff-breakdown:${token}`
 // (Planning / Shooting / Editing / Posting) with accumulated duration,
 // filterable by week / month / all time.
 
@@ -82,6 +81,7 @@ export async function handler(req, res) {
   if (!client) return res.status(403).json({ error: 'Invalid token' });
 
   const NOTION_KEY  = getNotionToken(client);
+  const ck = `creaitors:mkt-staff-breakdown:${token}`
   const TASKS_DB    = resolveDB(client, 'TASKS_DB',    '3348b289e31a80dc89e1eb7ba5b49b1a');
   const EMPLOYEE_DB = resolveDB(client, 'EMPLOYEE_DB', '78f0b17772964c018044a2dfdca6a5e8');
 

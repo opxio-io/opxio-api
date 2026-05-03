@@ -1,6 +1,5 @@
 // Vercel Serverless Function - Employee Stats
 // Returns per-employee task data with raw task list so the widget
-  const ck = `creaitors:employee-stats:${token}`
 // can slice any week client-side without re-fetching.
 
 import { getClientByToken, getNotionToken, resolveDB } from "../../../lib/supabase.js"
@@ -37,6 +36,7 @@ export async function handler(req, res) {
   const client = await getClientByToken(token);
   if (!client) return res.status(403).json({ error: 'Invalid token' });
   const NOTION_KEY  = getNotionToken(client);
+  const ck = `creaitors:employee-stats:${token}`
   const TASKS_DB    = resolveDB(client, 'TASKS_DB',    '3348b289e31a80dc89e1eb7ba5b49b1a');
   const EMPLOYEE_DB = resolveDB(client, 'EMPLOYEE_DB',  'bc5b99b59468498e8a294149d6f03134');
   const LIVE_DB     = resolveDB(client, 'LIVE_DB',      '8db736ebbe3483bd84290153e8252101');

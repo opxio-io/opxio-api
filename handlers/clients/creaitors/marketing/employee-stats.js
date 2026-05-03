@@ -3,6 +3,7 @@
 // fetches individual employee pages by ID, groups stats per employee.
 
 import { getClientByToken, getNotionToken, resolveDB, resolveField, resolveLabel } from "../../../../lib/supabase.js"
+import { cacheGet, cacheSet } from '../../../../lib/cache.js'
 
 
 export async function handler(req, res) {
@@ -16,6 +17,7 @@ export async function handler(req, res) {
   const client = await getClientByToken(token)
   if (!client) return res.status(403).json({ error: 'Invalid token' })
   const NOTION_KEY = getNotionToken(client)
+  const ck = `creaitors:mkt-employee-stats:${token}`
   const TASKS_DB = resolveDB(client, 'TASKS_DB', '3348b289e31a80dc89e1eb7ba5b49b1a')
   const EMPLOYEE_DB = resolveDB(client, 'EMPLOYEE_DB', 'bc5b99b59468498e8a294149d6f03134')
 
@@ -41,6 +43,12 @@ export async function handler(req, res) {
     taskRevision:   resolveLabel(client, 'taskRevisionStatus',   'Review Needed'),
   }
 
+  // ── In-memory cache ──────────────────────────────────────────────────────
+  const _c = cacheGet(ck)
+  if (_c) {
+    res.setHeader('X-Cache', _c.stale ? 'STALE' : 'HIT')
+    return res.status(200).json(_c.data)
+  }
   try {
 
     const headers = {
@@ -240,12 +248,15 @@ export async function handler(req, res) {
       };
     }).sort((a, b) => a.name.localeCompare(b.name));
 
-    return res.status(200).json({
+    const _r = {
       employees,
       weekLabel: `${weekStartStr} – ${weekEndStr}`,
       monthLabel: `${today.toLocaleString('en', { month: 'long' })} ${today.getFullYear()}`,
       generatedAt: new Date().toISOString(),
-    });
+    }
+    cacheSet(ck, _r)
+    res.setHeader('X-Cache', 'MISS')
+    return res.status(200).json(_r);
 
   } catch (err) {
     return res.status(500).json({ error: err.message });

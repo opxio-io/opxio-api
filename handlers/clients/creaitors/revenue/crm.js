@@ -4,6 +4,7 @@
 // Environment variables: NOTION_API_KEY
 
 import { getClientByToken, getNotionToken, resolveDB, resolveLabel } from "../../../../lib/supabase.js"
+import { cacheGet, cacheSet } from '../../../../lib/cache.js'
 
 
 export async function handler(req, res) {
@@ -17,12 +18,26 @@ export async function handler(req, res) {
   const client = await getClientByToken(token)
   if (!client) return res.status(403).json({ error: 'Invalid token' })
   const NOTION_KEY = getNotionToken(client)
+
+  // Parse query params early (needed for cache key)
+  const _url = new URL(req.url, `https://${req.headers.host}`)
+  const view     = _url.searchParams.get('view') || ''
+  const fromDate = _url.searchParams.get('from') || ''
+  const toDate   = _url.searchParams.get('to')   || ''
+
+  const ck = `creaitors:rev-crm:${token}:${view}:${fromDate}:${toDate}`
   // Two separate DBs: Leads and Deals
   const LEADS_DB = resolveDB(client, 'LEADS_DB', '340fe60097f6810091cfe204a1c13f5f')
   const DEALS_DB = resolveDB(client, 'DEALS_DB', 'caafe60097f683398df40197eeedbffe')
   // Legacy fallback: some clients use a single CRM_DB
   const CRM_DB = resolveDB(client, 'CRM_DB', DEALS_DB)
 
+  // ── In-memory cache ──────────────────────────────────────────────────────
+  const _c = cacheGet(ck)
+  if (_c) {
+    res.setHeader('X-Cache', _c.stale ? 'STALE' : 'HIT')
+    return res.status(200).json(_c.data)
+  }
   try {
 
     const headers = {
@@ -31,15 +46,10 @@ export async function handler(req, res) {
       'Content-Type': 'application/json',
     };
 
-    // Parse query params
-    const url = new URL(req.url, `https://${req.headers.host}`);
-    const view = url.searchParams.get('view');
-    const fromDate = url.searchParams.get('from');
-    const toDate = url.searchParams.get('to');
 
     // --- DEALS VIEW ---
     if (view === 'deals') {
-      return await handleDealsView(req, res, headers, DEALS_DB, client);
+      return await handleDealsView(req, res, headers, DEALS_DB, ck);
     }
 
     // Determine month label
@@ -233,7 +243,7 @@ export async function handler(req, res) {
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count);
 
-    return res.status(200).json({
+    const _r = {
       monthLabel,
       totalActiveLeads,
       totalPipelineValue,
@@ -252,7 +262,10 @@ export async function handler(req, res) {
       sourceBreakdown,
       unpaidRetainer,
       unpaidKol,
-    });
+    }
+    cacheSet(ck, _r)
+    res.setHeader('X-Cache', 'MISS')
+    return res.status(200).json(_r);
 
   } catch (err) {
     console.error(err);
@@ -261,7 +274,7 @@ export async function handler(req, res) {
 };
 
 // --- Deals Won/Lost handler (merged from deals.js) ---
-async function handleDealsView(req, res, headers, dbId, client) {
+async function handleDealsView(req, res, headers, dbId, ck) {
   async function queryAll(filter) {
     let all = [], hasMore = true, cursor;
     while (hasMore) {
@@ -355,7 +368,7 @@ async function handleDealsView(req, res, headers, dbId, client) {
   const wonBreakdown = Object.values(wonSourceMap).sort((a, b) => b.value - a.value);
   const lostBreakdown = Object.values(lostReasonMap).sort((a, b) => b.value - a.value);
 
-  return res.status(200).json({
+  const _r = {
     monthLabel,
     won: {
       total: wonTotal,
@@ -373,5 +386,8 @@ async function handleDealsView(req, res, headers, dbId, client) {
       deals: lostDeals,
       breakdown: lostBreakdown,
     },
-  });
+  }
+  cacheSet(ck, _r)
+  res.setHeader('X-Cache', 'MISS')
+  return res.status(200).json(_r);
 }

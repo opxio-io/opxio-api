@@ -3,6 +3,7 @@
 // Used by the HOM (Head of Marketing) view in the enhanced dashboard
 
 import { getClientByToken, getNotionToken, resolveDB } from "../../../lib/supabase.js"
+import { cacheGet, cacheSet } from '../../../lib/cache.js'
 
 export async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
@@ -15,6 +16,7 @@ export async function handler(req, res) {
   if (!client) return res.status(403).json({ error: 'Invalid token' })
 
   const NOTION_KEY = getNotionToken(client)
+  const ck = `creaitors:kol-data:${token}`
   const KOL_DB      = resolveDB(client, 'KOL_DIRECTORY',       'b14fe60097f6839db100812a72f16420')
   const CAMPAIGN_DB = resolveDB(client, 'INFLUENCER_CAMPAIGN',  'ca6fe60097f683318bb5817bbaee66aa')
 
@@ -50,6 +52,12 @@ export async function handler(req, res) {
   function num(prop)  { return prop?.number ?? null }
   function dt(prop)   { return prop?.date?.start || null }
 
+  // ── In-memory cache ──────────────────────────────────────────────────────
+  const _c = cacheGet(ck)
+  if (_c) {
+    res.setHeader('X-Cache', _c.stale ? 'STALE' : 'HIT')
+    return res.status(200).json(_c.data)
+  }
   try {
     const [kolRows, campaignRows] = await Promise.all([
       queryAll(KOL_DB),
@@ -139,7 +147,7 @@ export async function handler(req, res) {
       return 0
     })
 
-    return res.status(200).json({
+    const _r = {
       kols: {
         total:      kolList.length,
         byStatus:   byKolStatus,
@@ -156,7 +164,10 @@ export async function handler(req, res) {
         totalLikes,
         list:           campaignList,
       },
-    })
+    }
+    cacheSet(ck, _r)
+    res.setHeader('X-Cache', 'MISS')
+    return res.status(200).json(_r)
 
   } catch (err) {
     console.error('[kol-data]', err)

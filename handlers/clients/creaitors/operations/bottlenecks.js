@@ -3,6 +3,7 @@
 // Employee Hub DB for name resolution
 
 import { getClientByToken, getNotionToken, resolveDB, resolveField, resolveLabel } from "../../../../lib/supabase.js"
+import { cacheGet, cacheSet } from '../../../../lib/cache.js'
 
 
 export async function handler(req, res) {
@@ -16,6 +17,7 @@ export async function handler(req, res) {
   const client = await getClientByToken(token)
   if (!client) return res.status(403).json({ error: 'Invalid token' })
   const NOTION_KEY = getNotionToken(client)
+  const ck = `creaitors:ops-bottlenecks:${token}`
   const CONTENT_DB = resolveDB(client, 'CONTENT_DB', '3188b289e31a80e39bbbf1c01ffdd56b')
   const TASKS_DB = resolveDB(client, 'TASKS_DB', '3348b289e31a80dc89e1eb7ba5b49b1a')
   const EMPLOYEE_DB = resolveDB(client, 'EMPLOYEE_DB', 'bc5b99b59468498e8a294149d6f03134')
@@ -49,6 +51,12 @@ export async function handler(req, res) {
     taskRevision:      resolveLabel(client, 'taskRevisionStatus',     'Review Needed'),
   }
 
+  // ── In-memory cache ──────────────────────────────────────────────────────
+  const _c = cacheGet(ck)
+  if (_c) {
+    res.setHeader('X-Cache', _c.stale ? 'STALE' : 'HIT')
+    return res.status(200).json(_c.data)
+  }
   try {
 
     const headers = {
@@ -230,7 +238,7 @@ export async function handler(req, res) {
     taskItems.sort(sortFn);
 
     const all = [...contentItems, ...taskItems];
-    return res.status(200).json({
+    const _r = {
       total:        all.length,
       contentCount: contentItems.length,
       taskCount:    taskItems.length,
@@ -241,7 +249,10 @@ export async function handler(req, res) {
       revisions:    all.filter(i => i.reasons.includes('Revision')).length,
       content: contentItems,
       tasks:   taskItems,
-    });
+    }
+    cacheSet(ck, _r)
+    res.setHeader('X-Cache', 'MISS')
+    return res.status(200).json(_r);
 
   } catch (err) {
     console.error(err);

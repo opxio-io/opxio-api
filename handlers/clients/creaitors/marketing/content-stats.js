@@ -2,6 +2,7 @@
 // Returns broad overview stats for the stat card widget
 
 import { getClientByToken, getNotionToken, resolveDB, resolveField, resolveLabel } from "../../../../lib/supabase.js"
+import { cacheGet, cacheSet } from '../../../../lib/cache.js'
 
 
 export async function handler(req, res) {
@@ -15,6 +16,7 @@ export async function handler(req, res) {
   const client = await getClientByToken(token)
   if (!client) return res.status(403).json({ error: 'Invalid token' })
   const NOTION_KEY = getNotionToken(client)
+  const ck = `creaitors:mkt-content-stats:${token}`
   const CONTENT_DB   = resolveDB(client, 'CONTENT_DB',   '3188b289e31a80e39bbbf1c01ffdd56b')
   const TASKS_DB     = resolveDB(client, 'TASKS_DB',     '3348b289e31a80dc89e1eb7ba5b49b1a')
 
@@ -52,6 +54,12 @@ export async function handler(req, res) {
   const contentStatuses = client.labels?.contentStatuses ||
     ['Pre-Production', 'In Production', 'Final QC Review', 'Revision Needed', 'Ready for Posting', 'Done']
 
+  // ── In-memory cache ──────────────────────────────────────────────────────
+  const _c = cacheGet(ck)
+  if (_c) {
+    res.setHeader('X-Cache', _c.stale ? 'STALE' : 'HIT')
+    return res.status(200).json(_c.data)
+  }
   try {
 
     const headers = {
@@ -174,7 +182,7 @@ export async function handler(req, res) {
       }
     }
 
-    return res.status(200).json({
+    const _r = {
       // Card 1: Content in Motion
       contentInMotion,
       contentLinkedToCampaign,
@@ -205,7 +213,10 @@ export async function handler(req, res) {
         revision: contentRevision + tasksRevision,
         qc: contentQC + tasksQC,
       },
-    });
+    }
+    cacheSet(ck, _r)
+    res.setHeader('X-Cache', 'MISS')
+    return res.status(200).json(_r);
 
   } catch (err) {
     console.error(err);

@@ -31,13 +31,25 @@ app.use('/api',           documentRoutes)
 app.use('/api/client',    clientRoutes)
 app.use('/api/admin',     adminRoutes)
 app.use('/api/data',      dataRoutes)
-app.use('/api/creaitors', creaitorRoutes)
-app.use('/api/marketing', marketingRoutes)
-app.use('/api/operations',operationsRoutes)
+
+// Creaitors — legacy paths (keep for backward compat)
+app.use('/api/creaitors',   creaitorRoutes)
+app.use('/api/marketing',   marketingRoutes)
+app.use('/api/operations',  operationsRoutes)
+app.use('/api/revenue',     revenueRoutes)
+app.use('/api/executive',   executiveRoutes)
+
+// Creaitors — canonical paths (widgets now call these)
+app.use('/api/clients/creaitors',             creaitorRoutes)
+app.use('/api/clients/creaitors/marketing',   marketingRoutes)
+app.use('/api/clients/creaitors/operations',  operationsRoutes)
+app.use('/api/clients/creaitors/revenue',     revenueRoutes)
+app.use('/api/clients/creaitors/executive',   executiveRoutes)
+
+// Shin Supplies
 app.use('/api/cupterra',              cupterraRoutes)
 app.use('/api/clients/shin-supplies', cupterraRoutes)
-app.use('/api/revenue',   revenueRoutes)
-app.use('/api/executive', executiveRoutes)
+
 app.use('/api/portal',    portalRoutes)
 app.use('/api/proposals', proposalRoutes)
 app.use('/api/private',   privateRoutes)
@@ -53,13 +65,35 @@ app.listen(PORT, () => {
   console.log(`opxio-api running on port ${PORT}`)
 
   // ── Cache warmer — keeps Railway awake + cache hot ────────────────────
-  // Hits the real endpoint every 4 minutes via public URL so Railway sees
-  // it as external traffic (prevents sleep) and cache stays warm.
+  // Hits each real endpoint every 4 minutes. Railway sees this as external
+  // traffic (prevents sleep). Cache stays warm for all clients.
+  const CREAITORS_TOKEN = 'f647b9df0a380951e524f18de1194faac46cdac82694bfb15fb032f13fab00d1'
+  const SHIN_TOKEN      = 'd3d18bd59d0b0a63252fe7c91264c69469a72b16fc059fd31b946c2d0b703182'
+  const BASE            = 'https://api.opxio.io/api/clients'
+
   const WARM_TARGETS = [
-    {
-      label: 'shin-supplies/crm-pipeline',
-      url:   'https://api.opxio.io/api/clients/shin-supplies/crm-pipeline?token=d3d18bd59d0b0a63252fe7c91264c69469a72b16fc059fd31b946c2d0b703182',
-    },
+    // Shin Supplies
+    { label: 'shin-supplies/crm-pipeline',      url: `${BASE}/shin-supplies/crm-pipeline?token=${SHIN_TOKEN}` },
+    // Creaitors — root handlers
+    { label: 'creaitors/crm',                   url: `${BASE}/creaitors/crm?token=${CREAITORS_TOKEN}` },
+    { label: 'creaitors/campaign-stats',         url: `${BASE}/creaitors/campaign-stats?token=${CREAITORS_TOKEN}` },
+    { label: 'creaitors/content-stats',          url: `${BASE}/creaitors/content-stats?token=${CREAITORS_TOKEN}` },
+    { label: 'creaitors/employee-stats',         url: `${BASE}/creaitors/employee-stats?token=${CREAITORS_TOKEN}` },
+    { label: 'creaitors/kol-data',               url: `${BASE}/creaitors/kol-data?token=${CREAITORS_TOKEN}` },
+    { label: 'creaitors/bottlenecks',            url: `${BASE}/creaitors/bottlenecks?token=${CREAITORS_TOKEN}` },
+    { label: 'creaitors/sales',                  url: `${BASE}/creaitors/sales?token=${CREAITORS_TOKEN}` },
+    { label: 'creaitors/projects',               url: `${BASE}/creaitors/projects?token=${CREAITORS_TOKEN}` },
+    // Creaitors — marketing subdir
+    { label: 'creaitors/marketing/campaign-stats',  url: `${BASE}/creaitors/marketing/campaign-stats?token=${CREAITORS_TOKEN}` },
+    { label: 'creaitors/marketing/content-stats',   url: `${BASE}/creaitors/marketing/content-stats?token=${CREAITORS_TOKEN}` },
+    { label: 'creaitors/marketing/employee-stats',  url: `${BASE}/creaitors/marketing/employee-stats?token=${CREAITORS_TOKEN}` },
+    { label: 'creaitors/marketing/staff-breakdown', url: `${BASE}/creaitors/marketing/staff-breakdown?token=${CREAITORS_TOKEN}` },
+    { label: 'creaitors/marketing/bottlenecks',     url: `${BASE}/creaitors/marketing/bottlenecks?token=${CREAITORS_TOKEN}` },
+    { label: 'creaitors/marketing/crm',             url: `${BASE}/creaitors/marketing/crm?token=${CREAITORS_TOKEN}` },
+    // Creaitors — operations
+    { label: 'creaitors/operations/bottlenecks',    url: `${BASE}/creaitors/operations/bottlenecks?token=${CREAITORS_TOKEN}` },
+    // Creaitors — revenue
+    { label: 'creaitors/revenue/crm',               url: `${BASE}/creaitors/revenue/crm?token=${CREAITORS_TOKEN}` },
   ]
 
   async function warmCache() {

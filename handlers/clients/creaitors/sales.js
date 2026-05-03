@@ -3,6 +3,7 @@
 // Environment variables: NOTION_API_KEY, NOTION_DATABASE_ID
 
 import { getClientByToken, getNotionToken, resolveDB } from "../../../lib/supabase.js"
+import { cacheGet, cacheSet } from '../../../lib/cache.js'
 
 
 export async function handler(req, res) {
@@ -16,8 +17,15 @@ export async function handler(req, res) {
   const client = await getClientByToken(token)
   if (!client) return res.status(403).json({ error: 'Invalid token' })
   const NOTION_KEY = getNotionToken(client)
+  const ck = `creaitors:sales:${token}`
   const CRM_DB = resolveDB(client, 'CRM_DB', '3188b289e31a81da8939cb08d15be667')
 
+  // ── In-memory cache ──────────────────────────────────────────────────────
+  const _c = cacheGet(ck)
+  if (_c) {
+    res.setHeader('X-Cache', _c.stale ? 'STALE' : 'HIT')
+    return res.status(200).json(_c.data)
+  }
   try {
 
     const headers = {
@@ -105,12 +113,15 @@ export async function handler(req, res) {
     // Sort follow-ups by date ascending (most overdue first)
     followUpsDue.sort((a, b) => a.nextFollowUp.localeCompare(b.nextFollowUp));
 
-    return res.status(200).json({
+    const _r = {
       activeLeads: { count: activeLeads.length, leads: activeLeads },
       followUpsDue: { count: followUpsDue.length, leads: followUpsDue },
       wonThisMonth: { count: wonThisMonth.length, deals: wonThisMonth },
       lostThisMonth: { count: lostThisMonth.length, deals: lostThisMonth },
-    });
+    }
+    cacheSet(ck, _r)
+    res.setHeader('X-Cache', 'MISS')
+    return res.status(200).json(_r);
 
   } catch (err) {
     return res.status(500).json({ error: err.message });

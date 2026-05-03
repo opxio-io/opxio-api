@@ -3,6 +3,7 @@
 // Environment variables: NOTION_API_KEY
 
 import { getClientByToken, getNotionToken, resolveDB } from "../../../lib/supabase.js"
+import { cacheGet, cacheSet } from '../../../lib/cache.js'
 
 
 export async function handler(req, res) {
@@ -16,8 +17,15 @@ export async function handler(req, res) {
   const client = await getClientByToken(token)
   if (!client) return res.status(403).json({ error: 'Invalid token' })
   const NOTION_KEY = getNotionToken(client)
+  const ck = `creaitors:projects:${token}`
   const CONTENT_DB = resolveDB(client, 'CONTENT_DB', '3188b289e31a80e39bbbf1c01ffdd56b')
 
+  // ── In-memory cache ──────────────────────────────────────────────────────
+  const _c = cacheGet(ck)
+  if (_c) {
+    res.setHeader('X-Cache', _c.stale ? 'STALE' : 'HIT')
+    return res.status(200).json(_c.data)
+  }
   try {
     const headers = {
       'Authorization': `Bearer ${NOTION_KEY}`,
@@ -135,6 +143,8 @@ export async function handler(req, res) {
       },
     };
 
+    cacheSet(ck, stats)
+    res.setHeader('X-Cache', 'MISS')
     return res.status(200).json(stats);
   } catch (err) {
     return res.status(500).json({ error: err.message });

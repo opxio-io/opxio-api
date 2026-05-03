@@ -3,6 +3,7 @@
 // Environment variables: NOTION_API_KEY
 
 import { getClientByToken, getNotionToken, resolveDB } from "../../../lib/supabase.js"
+import { cacheGet, cacheSet } from '../../../lib/cache.js'
 
 
 export async function handler(req, res) {
@@ -16,8 +17,15 @@ export async function handler(req, res) {
   const client = await getClientByToken(token)
   if (!client) return res.status(403).json({ error: 'Invalid token' })
   const NOTION_KEY = getNotionToken(client)
+  const ck = `creaitors:campaign-stats:${token}`
   const CAMPAIGNS_DB = resolveDB(client, 'CAMPAIGNS_DB', '3188b289e31a806bac9de1ee09aff2ad')
 
+  // ── In-memory cache ──────────────────────────────────────────────────────
+  const _c = cacheGet(ck)
+  if (_c) {
+    res.setHeader('X-Cache', _c.stale ? 'STALE' : 'HIT')
+    return res.status(200).json(_c.data)
+  }
   try {
 
     const headers = {
@@ -173,7 +181,7 @@ export async function handler(req, res) {
 
     campaignDetails.sort((a, b) => a.pct - b.pct);
 
-    return res.status(200).json({
+    const _r = {
       activeCampaigns,
       totalDeliverables,
       completedDeliverables,
@@ -193,7 +201,10 @@ export async function handler(req, res) {
       },
       campaignDetails,
       typeBreakdown: Object.entries(typeCounts).map(([name, count]) => ({ name, count })),
-    });
+    }
+    cacheSet(ck, _r)
+    res.setHeader('X-Cache', 'MISS')
+    return res.status(200).json(_r);
 
   } catch (err) {
     console.error(err);

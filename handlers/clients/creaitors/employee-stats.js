@@ -1,8 +1,10 @@
 // Vercel Serverless Function - Employee Stats
 // Returns per-employee task data with raw task list so the widget
+  const ck = `creaitors:employee-stats:${token}`
 // can slice any week client-side without re-fetching.
 
 import { getClientByToken, getNotionToken, resolveDB } from "../../../lib/supabase.js"
+import { cacheGet, cacheSet } from '../../../lib/cache.js'
 
 function getStage(taskName) {
   const n = (taskName || '').toLowerCase();
@@ -40,6 +42,12 @@ export async function handler(req, res) {
   const LIVE_DB     = resolveDB(client, 'LIVE_DB',      '8db736ebbe3483bd84290153e8252101');
   const ISSUES_DB   = resolveDB(client, 'ISSUES_DB',    '34c736ebbe34815fb0b0d4dcef5ca373');
 
+  // ── In-memory cache ──────────────────────────────────────────────────────
+  const _c = cacheGet(ck)
+  if (_c) {
+    res.setHeader('X-Cache', _c.stale ? 'STALE' : 'HIT')
+    return res.status(200).json(_c.data)
+  }
   try {
     const headers = {
       'Authorization': 'Bearer ' + NOTION_KEY,
@@ -266,11 +274,14 @@ export async function handler(req, res) {
       };
     }).sort((a, b) => a.name.localeCompare(b.name));
 
-    return res.status(200).json({
+    const _r = {
       employees,
       monthLabel:  today.toLocaleString('en', { month: 'long' }) + ' ' + today.getFullYear(),
       generatedAt: new Date().toISOString(),
-    });
+    }
+    cacheSet(ck, _r)
+    res.setHeader('X-Cache', 'MISS')
+    return res.status(200).json(_r);
 
   } catch (err) {
     return res.status(500).json({ error: err.message });

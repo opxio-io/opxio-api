@@ -1,9 +1,11 @@
 // Vercel Serverless Function — Staff Task Breakdown
 // Queries EMPLOYEE_DB for Active staff, then maps Done tasks by type
+  const ck = `creaitors:mkt-staff-breakdown:${token}`
 // (Planning / Shooting / Editing / Posting) with accumulated duration,
 // filterable by week / month / all time.
 
 import { getClientByToken, getNotionToken, resolveDB, resolveField, resolveLabel } from "../../../../lib/supabase.js"
+import { cacheGet, cacheSet } from '../../../../lib/cache.js'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -94,6 +96,12 @@ export async function handler(req, res) {
 
   const DONE_STATUS = resolveLabel(client, 'taskDoneStatus', 'Done');
 
+  // ── In-memory cache ──────────────────────────────────────────────────────
+  const _c = cacheGet(ck)
+  if (_c) {
+    res.setHeader('X-Cache', _c.stale ? 'STALE' : 'HIT')
+    return res.status(200).json(_c.data)
+  }
   try {
     const headers = {
       'Authorization': `Bearer ${NOTION_KEY}`,
@@ -207,11 +215,14 @@ export async function handler(req, res) {
       }))
       .sort((a, b) => b.all.total.done - a.all.total.done);
 
-    return res.status(200).json({
+    const _r = {
       employees,
       weekLabel:  `${weekStartStr} – ${weekEndStr}`,
       monthLabel: `${today.toLocaleString('en', { month: 'long' })} ${today.getFullYear()}`,
-    });
+    }
+    cacheSet(ck, _r)
+    res.setHeader('X-Cache', 'MISS')
+    return res.status(200).json(_r);
 
   } catch (err) {
     console.error(err);

@@ -23,6 +23,24 @@ app.use(cors({ origin: '*', methods: ['GET','POST','PUT','DELETE','OPTIONS'] }))
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true }))
 
+
+// ── Widget origin guard ──────────────────────────────────────────────────
+// Only requests from widgets.opxio.io (or localhost in dev) may call client
+// data endpoints. Browser fetch always sends Origin; block everything else.
+const WIDGET_ORIGINS = [
+  'https://widgets.opxio.io',
+  'https://opxio.io',
+]
+function widgetOriginGuard(req, res, next) {
+  const origin = req.headers.origin || ''
+  const isLocal = origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1')
+  const isAllowed = !origin || isLocal || WIDGET_ORIGINS.some(o => origin === o)
+  if (!isAllowed) {
+    return res.status(403).json({ error: 'Forbidden' })
+  }
+  next()
+}
+
 app.get('/', (req, res) => res.json({ ok: true, service: 'opxio-api', ts: new Date().toISOString() }))
 app.get('/health', (req, res) => res.json({ ok: true }))
 
@@ -33,22 +51,22 @@ app.use('/api/admin',     adminRoutes)
 app.use('/api/data',      dataRoutes)
 
 // Creaitors — legacy paths (keep for backward compat)
-app.use('/api/creaitors',   creaitorRoutes)
-app.use('/api/marketing',   marketingRoutes)
-app.use('/api/operations',  operationsRoutes)
-app.use('/api/revenue',     revenueRoutes)
-app.use('/api/executive',   executiveRoutes)
+app.use('/api/creaitors', widgetOriginGuard,   creaitorRoutes)
+app.use('/api/marketing',   widgetOriginGuard, marketingRoutes)
+app.use('/api/operations',  widgetOriginGuard, operationsRoutes)
+app.use('/api/revenue',     widgetOriginGuard, revenueRoutes)
+app.use('/api/executive',   widgetOriginGuard, executiveRoutes)
 
 // Creaitors — canonical paths (widgets now call these)
-app.use('/api/clients/creaitors',             creaitorRoutes)
-app.use('/api/clients/creaitors/marketing',   marketingRoutes)
-app.use('/api/clients/creaitors/operations',  operationsRoutes)
-app.use('/api/clients/creaitors/revenue',     revenueRoutes)
-app.use('/api/clients/creaitors/executive',   executiveRoutes)
+app.use('/api/clients/creaitors', widgetOriginGuard,             creaitorRoutes)
+app.use('/api/clients/creaitors/marketing',   widgetOriginGuard, marketingRoutes)
+app.use('/api/clients/creaitors/operations',  widgetOriginGuard, operationsRoutes)
+app.use('/api/clients/creaitors/revenue',     widgetOriginGuard, revenueRoutes)
+app.use('/api/clients/creaitors/executive',   widgetOriginGuard, executiveRoutes)
 
 // Shin Supplies
-app.use('/api/cupterra',              cupterraRoutes)
-app.use('/api/clients/shin-supplies', cupterraRoutes)
+app.use('/api/cupterra',              widgetOriginGuard, cupterraRoutes)
+app.use('/api/clients/shin-supplies', widgetOriginGuard, cupterraRoutes)
 
 app.use('/api/portal',    portalRoutes)
 app.use('/api/proposals', proposalRoutes)

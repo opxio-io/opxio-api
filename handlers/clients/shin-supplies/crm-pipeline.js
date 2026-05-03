@@ -1,19 +1,25 @@
 // handlers/clients/shin-supplies/crm-pipeline.js
-// CRM & Pipeline dashboard — with in-memory cache for fast month switching
+// CRM & Pipeline dashboard
+//
+// Data layer (fastest → slowest):
+//   1. In-memory cache (5 min TTL, stale-while-revalidate 30 min)
+//   2. Postgres (pre-synced Notion data, ~10ms)
+//   3. Notion API (direct, only if Postgres not ready — triggers bg sync)
 
-import { getClientByToken, getNotionToken, resolveDB } from "../../../lib/supabase.js"
+import { getClientByToken } from "../../../lib/supabase.js"
 import { cacheGet, cacheSet, cacheKey } from "../../../lib/cache.js"
+import { isPostgresEnabled } from "../../../lib/db.js"
+import { readFromDb, syncShinSupplies } from "../../../lib/sync/shin-supplies.js"
 
+// ── Fallback: direct Notion query (used only if Postgres is empty) ────────
 const ENQUIRY_DB_DEFAULT = '71c9ba4af0694291876bf78422805f18'
 const PEOPLE_DB_DEFAULT  = '34cfe60097f680e1bac0e75b431bc325'
-const EXCLUDED           = ['Unassigned', 'Nurhan']
-const STAGE_ORDER        = ['New Lead', 'Quotation Sent', 'Negotiation', 'Sales Order Issued', 'Closed Won', 'Closed Lost']
 
 async function queryAll(dbId, notionKey) {
   const headers = {
-    'Authorization': `Bearer ${notionKey}`,
+    Authorization:    `Bearer ${notionKey}`,
     'Notion-Version': '2022-06-28',
-    'Content-Type': 'application/json',
+    'Content-Type':   'application/json',
   }
   let results = [], hasMore = true, cursor
   while (hasMore) {
@@ -25,40 +31,33 @@ async function queryAll(dbId, notionKey) {
     if (!r.ok) throw new Error(await r.text())
     const d = await r.json()
     results = results.concat(d.results)
-    hasMore = d.has_more
-    cursor  = d.next_cursor
+    hasMore  = d.has_more
+    cursor   = d.next_cursor
   }
   return results
 }
 
-const getTitle    = p => (p?.title    || []).map(t => t.plain_text).join('')
-const getStatus   = p => p?.status?.name || p?.select?.name || null
-const getDate     = p => p?.date?.start  || null
+// ── Property getters ──────────────────────────────────────────────────────
+const getTitle    = p => (p?.title         || []).map(t => t.plain_text).join('')
+const getStatus   = p => p?.status?.name   || p?.select?.name || null
+const getDate     = p => p?.date?.start    || null
 const getCheckbox = p => p?.checkbox === true
-const getRelIds   = p => (p?.relation   || []).map(r => r.id)
-const getMultiSel = p => (p?.multi_select || []).map(s => s.name)
+const getRelIds   = p => (p?.relation      || []).map(r => r.id)
+const getMultiSel = p => (p?.multi_select  || []).map(s => s.name)
 
+const EXCLUDED   = ['Unassigned', 'Nurhan']
+const STAGE_ORDER = ['New Lead', 'Quotation Sent', 'Negotiation', 'Sales Order Issued', 'Closed Won', 'Closed Lost']
+
+// ── Stats computation (pure — no I/O) ────────────────────────────────────
 function computeStats({ pages, repMap, mStart, mEnd, now }) {
   const today = now.toISOString().slice(0, 10)
   const d3    = new Date(now); d3.setDate(now.getDate() + 3)
   const d3Str = d3.toISOString().slice(0, 10)
 
-  // Month-scoped
-  let monthLeads     = 0
-  let quotationsSent = 0  // past New Lead, submitted this month
-  let closedWon      = 0  // Closed Won, submitted this month
-  let closedLost     = 0  // Closed Lost, submitted this month
+  let monthLeads = 0, quotationsSent = 0, closedWon = 0, closedLost = 0
+  let followupsToday = 0, followupsNext3 = 0, overdueResponse = 0
 
-  // LIVE (always today)
-  let followupsToday  = 0
-  let followupsNext3  = 0
-  let overdueResponse = 0  // open New Lead > 2h no quote
-
-  const stageCount        = {}
-  const productCount      = {}
-  const sourceCount       = {}
-  const sourceClosedCount = {}
-  const repStats          = {}
+  const stageCount = {}, productCount = {}, sourceCount = {}, sourceClosedCount = {}, repStats = {}
 
   for (const page of pages) {
     const p         = page.properties
@@ -76,10 +75,9 @@ function computeStats({ pages, repMap, mStart, mEnd, now }) {
     const ageH     = submDate ? (now - submDate) / 3600000 : null
     const inMonth  = submDate && submDate >= mStart && submDate < mEnd
     const isClosed = status === 'Closed Won' || status === 'Closed Lost' || status === 'Done'
-    const isWon    = status === 'Closed Won' || status === 'Done'
+    const isWon    = status === 'Closed Won'  || status === 'Done'
     const isLost   = status === 'Closed Lost'
 
-    // Rep name
     let repName = 'Unassigned'
     if (assigned.length > 0) {
       const rid = assigned[0]
@@ -87,20 +85,16 @@ function computeStats({ pages, repMap, mStart, mEnd, now }) {
     }
     if (!repStats[repName]) repStats[repName] = { closedWon: 0, closedLost: 0, activePipeline: 0, activities: 0, followupsToday: 0 }
 
-    // ── Month-scoped ──
     if (inMonth) {
       monthLeads++
       repStats[repName].activities++
-
       const stageKey = status === 'Done' ? 'Closed Won' : status
       stageCount[stageKey] = (stageCount[stageKey] || 0) + 1
-
       for (const prod of products) productCount[prod] = (productCount[prod] || 0) + 1
       if (source) {
         sourceCount[source] = (sourceCount[source] || 0) + 1
         if (isWon) sourceClosedCount[source] = (sourceClosedCount[source] || 0) + 1
       }
-
       if (status !== 'New Lead') {
         quotationsSent++
         if (isWon)  { closedWon++;  repStats[repName].closedWon++ }
@@ -108,57 +102,34 @@ function computeStats({ pages, repMap, mStart, mEnd, now }) {
       }
     }
 
-    // ── LIVE: follow-ups (all open leads) ──
     if (nextFU && !isClosed) {
       if (nextFU <= today) { followupsToday++; repStats[repName].followupsToday++ }
       if (nextFU <= d3Str) followupsNext3++
     }
-
-    // ── LIVE: overdue response (open New Lead > 2h no quote) ──
-    if (!isClosed && !quoIssued && status === 'New Lead' && ageH !== null && ageH > 2) {
-      overdueResponse++
-    }
-
-    // Rep — active pipeline (not month-scoped)
+    if (!isClosed && !quoIssued && status === 'New Lead' && ageH !== null && ageH > 2) overdueResponse++
     if (!isClosed) repStats[repName].activePipeline++
   }
 
-  // Close rate: Won ÷ (Won + Lost) — only decided deals
   const totalDecided = closedWon + closedLost
   const closeRate    = totalDecided > 0 ? Math.round((closedWon / totalDecided) * 100) : null
-
-  const stageFunnel = STAGE_ORDER.map(s => ({ stage: s, count: stageCount[s] || 0 }))
-
+  const stageFunnel  = STAGE_ORDER.map(s => ({ stage: s, count: stageCount[s] || 0 }))
   const repBreakdown = Object.entries(repStats)
     .filter(([name]) => !EXCLUDED.includes(name))
-    .map(([name, s]) => ({
-      name,
-      closedWon:      s.closedWon      || 0,
-      closedLost:     s.closedLost     || 0,
-      activePipeline: s.activePipeline || 0,
-      activities:     s.activities     || 0,
-      followupsToday: s.followupsToday || 0,
-    }))
+    .map(([name, s]) => ({ name, closedWon: s.closedWon || 0, closedLost: s.closedLost || 0, activePipeline: s.activePipeline || 0, activities: s.activities || 0, followupsToday: s.followupsToday || 0 }))
     .sort((a, b) => b.closedWon - a.closedWon || b.activePipeline - a.activePipeline)
 
   return {
-    monthLeads,
-    quotationsSent,
-    closedWon,
-    closedLost,
-    closeRate,
+    monthLeads, quotationsSent, closedWon, closedLost, closeRate,
     live: { followupsToday, followupsNext3, overdueResponse },
-    stageFunnel,
-    repBreakdown,
+    stageFunnel, repBreakdown,
     productBreakdown: productCount,
     sourceBreakdown: Object.fromEntries(
-      Object.entries(sourceCount).map(([src, count]) => [
-        src, { leads: count, closed: sourceClosedCount[src] || 0 }
-      ])
+      Object.entries(sourceCount).map(([src, count]) => [src, { leads: count, closed: sourceClosedCount[src] || 0 }])
     ),
   }
 }
 
+// ── Request handler ───────────────────────────────────────────────────────
 export async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS')
@@ -170,11 +141,6 @@ export async function handler(req, res) {
   const client = await getClientByToken(token)
   if (!client) return res.status(403).json({ error: 'Invalid token' })
 
-  const NOTION_KEY = getNotionToken(client)
-  const ENQUIRY_DB = resolveDB(client, 'enquiry_submissions', ENQUIRY_DB_DEFAULT)
-  const PEOPLE_DB  = resolveDB(client, 'people', PEOPLE_DB_DEFAULT)
-
-  // Month window
   const now    = new Date()
   const qMonth = req.query.month !== undefined ? parseInt(req.query.month) : null
   const qYear  = req.query.year  !== undefined ? parseInt(req.query.year)  : null
@@ -184,15 +150,37 @@ export async function handler(req, res) {
   const mEnd   = new Date(mYear, mMon + 1, 1)
 
   try {
-    // ── Cache: stale-while-revalidate ──────────────────────────────────────
-    // Serve stale data instantly, refresh in background. Month switching = no wait.
-    const ck = cacheKey('shin-supplies:crm-pipeline', client.id)
+    const ck  = cacheKey('shin-supplies:crm-pipeline', client.id)
     const hit = cacheGet(ck)
 
-    async function fetchFresh() {
+    async function loadFresh() {
+      // ── Try Postgres first ────────────────────────────────────────────
+      if (isPostgresEnabled()) {
+        try {
+          const dbData = await readFromDb()
+          if (dbData) {
+            cacheSet(ck, dbData)
+            return dbData
+          }
+          // Postgres empty — first run, trigger sync then retry
+          console.log('[crm-pipeline] Postgres empty — triggering initial sync')
+          await syncShinSupplies()
+          const afterSync = await readFromDb()
+          if (afterSync) { cacheSet(ck, afterSync); return afterSync }
+        } catch (e) {
+          console.error('[crm-pipeline] Postgres error, falling back to Notion:', e.message)
+        }
+      }
+
+      // ── Fallback: direct Notion query (Postgres not ready) ────────────
+      const { getNotionToken, resolveDB } = await import('../../../lib/supabase.js')
+      const notionKey = getNotionToken(client)
+      const enquiryDb = resolveDB(client, 'enquiry_submissions', ENQUIRY_DB_DEFAULT)
+      const peopleDb  = resolveDB(client, 'people', PEOPLE_DB_DEFAULT)
+
       const [pages, people] = await Promise.all([
-        queryAll(ENQUIRY_DB, NOTION_KEY),
-        queryAll(PEOPLE_DB, NOTION_KEY).catch(() => []),
+        queryAll(enquiryDb, notionKey),
+        queryAll(peopleDb,  notionKey).catch(() => []),
       ])
       const repMap = {}
       for (const p of people) {
@@ -207,13 +195,12 @@ export async function handler(req, res) {
 
     let cached
     if (!hit) {
-      // Hard miss — must fetch before responding
-      cached = await fetchFresh()
+      cached = await loadFresh()
     } else {
       cached = hit.data
       if (hit.stale) {
-        // Stale — respond immediately with old data, refresh in background
-        fetchFresh().catch(e => console.error('bg refresh error:', e.message))
+        // Stale — respond instantly, refresh in background
+        loadFresh().catch(e => console.error('[crm-pipeline] bg refresh error:', e.message))
       }
     }
 
@@ -224,6 +211,7 @@ export async function handler(req, res) {
       ...stats,
       updatedAt:   now.toISOString(),
       filterMonth: { year: mYear, month: mMon },
+      dataSource:  isPostgresEnabled() ? 'postgres' : 'notion',
     })
 
   } catch (e) {

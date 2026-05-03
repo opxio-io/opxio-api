@@ -1,20 +1,28 @@
 // handlers/clients/shin-supplies/crm-pipeline.js
 // CRM & Pipeline dashboard
 //
-// Data layer (fastest → slowest):
-//   1. In-memory cache (5 min TTL, stale-while-revalidate 30 min)
-//   2. Postgres (pre-synced Notion data, ~10ms)
-//   3. Notion API (direct, only if Postgres not ready — triggers bg sync)
+// Cache strategy (fastest → slowest):
+//   1. In-memory cache — HIT: return instantly, no I/O
+//   2. In-flight dedup — if a Notion fetch is already running, wait for it (no duplicate calls)
+//   3. Notion API — with 8s timeout + circuit breaker (serve STALE on timeout, error if no cache)
+//
+// X-Cache header: HIT | STALE | MISS
 
-import { getClientByToken } from "../../../lib/supabase.js"
+import { getClientByToken, getNotionToken, resolveDB } from "../../../lib/supabase.js"
 import { cacheGet, cacheSet, cacheKey } from "../../../lib/cache.js"
-import { isPostgresEnabled } from "../../../lib/db.js"
-import { readFromDb, syncShinSupplies } from "../../../lib/sync/shin-supplies.js"
 
-// ── Fallback: direct Notion query (used only if Postgres is empty) ────────
 const ENQUIRY_DB_DEFAULT = '71c9ba4af0694291876bf78422805f18'
 const PEOPLE_DB_DEFAULT  = '34cfe60097f680e1bac0e75b431bc325'
+const EXCLUDED           = ['Unassigned', 'Nurhan']
+const STAGE_ORDER        = ['New Lead', 'Quotation Sent', 'Negotiation', 'Sales Order Issued', 'Closed Won', 'Closed Lost']
+const NOTION_TIMEOUT_MS  = 8_000  // give up on Notion after 8s, serve stale
 
+// ── In-flight deduplication ───────────────────────────────────────────────
+// If two requests arrive simultaneously on a cold cache, only ONE Notion call
+// is made. The second request waits for the same promise.
+const _inflight = new Map()
+
+// ── Notion query with timeout ─────────────────────────────────────────────
 async function queryAll(dbId, notionKey) {
   const headers = {
     Authorization:    `Bearer ${notionKey}`,
@@ -23,30 +31,33 @@ async function queryAll(dbId, notionKey) {
   }
   let results = [], hasMore = true, cursor
   while (hasMore) {
-    const body = { page_size: 100 }
-    if (cursor) body.start_cursor = cursor
-    const r = await fetch(`https://api.notion.com/v1/databases/${dbId}/query`, {
-      method: 'POST', headers, body: JSON.stringify(body)
-    })
-    if (!r.ok) throw new Error(await r.text())
-    const d = await r.json()
-    results = results.concat(d.results)
-    hasMore  = d.has_more
-    cursor   = d.next_cursor
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), NOTION_TIMEOUT_MS)
+    try {
+      const body = { page_size: 100 }
+      if (cursor) body.start_cursor = cursor
+      const r = await fetch(`https://api.notion.com/v1/databases/${dbId}/query`, {
+        method: 'POST', headers, body: JSON.stringify(body), signal: ctrl.signal,
+      })
+      if (!r.ok) throw new Error(`Notion ${r.status}: ${await r.text()}`)
+      const d = await r.json()
+      results = results.concat(d.results)
+      hasMore  = d.has_more
+      cursor   = d.next_cursor
+    } finally {
+      clearTimeout(timer)
+    }
   }
   return results
 }
 
 // ── Property getters ──────────────────────────────────────────────────────
-const getTitle    = p => (p?.title         || []).map(t => t.plain_text).join('')
-const getStatus   = p => p?.status?.name   || p?.select?.name || null
-const getDate     = p => p?.date?.start    || null
+const getTitle    = p => (p?.title        || []).map(t => t.plain_text).join('')
+const getStatus   = p => p?.status?.name  || p?.select?.name || null
+const getDate     = p => p?.date?.start   || null
 const getCheckbox = p => p?.checkbox === true
-const getRelIds   = p => (p?.relation      || []).map(r => r.id)
-const getMultiSel = p => (p?.multi_select  || []).map(s => s.name)
-
-const EXCLUDED   = ['Unassigned', 'Nurhan']
-const STAGE_ORDER = ['New Lead', 'Quotation Sent', 'Negotiation', 'Sales Order Issued', 'Closed Won', 'Closed Lost']
+const getRelIds   = p => (p?.relation     || []).map(r => r.id)
+const getMultiSel = p => (p?.multi_select || []).map(s => s.name)
 
 // ── Stats computation (pure — no I/O) ────────────────────────────────────
 function computeStats({ pages, repMap, mStart, mEnd, now }) {
@@ -149,73 +160,82 @@ export async function handler(req, res) {
   const mStart = new Date(mYear, mMon, 1)
   const mEnd   = new Date(mYear, mMon + 1, 1)
 
-  try {
-    const ck  = cacheKey('shin-supplies:crm-pipeline', client.id)
-    const hit = cacheGet(ck)
+  const ck  = cacheKey('shin-supplies:crm-pipeline', client.id)
+  const hit = cacheGet(ck)
 
-    async function loadFresh() {
-      // ── Try Postgres first ────────────────────────────────────────────
-      if (isPostgresEnabled()) {
-        try {
-          const dbData = await readFromDb()
-          if (dbData) {
-            cacheSet(ck, dbData)
-            return dbData
-          }
-          // Postgres empty — first run, trigger sync then retry
-          console.log('[crm-pipeline] Postgres empty — triggering initial sync')
-          await syncShinSupplies()
-          const afterSync = await readFromDb()
-          if (afterSync) { cacheSet(ck, afterSync); return afterSync }
-        } catch (e) {
-          console.error('[crm-pipeline] Postgres error, falling back to Notion:', e.message)
+  // ── HIT: fresh cache — return instantly ──────────────────────────────
+  if (hit && !hit.stale) {
+    res.setHeader('X-Cache', 'HIT')
+    const stats = computeStats({ ...hit.data, mStart, mEnd, now })
+    return res.status(200).json({ total: hit.data.total, ...stats, updatedAt: now.toISOString(), filterMonth: { year: mYear, month: mMon } })
+  }
+
+  // ── STALE: serve immediately, refresh in background ──────────────────
+  if (hit && hit.stale) {
+    res.setHeader('X-Cache', 'STALE')
+    const stats = computeStats({ ...hit.data, mStart, mEnd, now })
+    res.status(200).json({ total: hit.data.total, ...stats, updatedAt: now.toISOString(), filterMonth: { year: mYear, month: mMon } })
+    // Background refresh — deduplicated
+    if (!_inflight.has(ck)) {
+      const notionKey  = getNotionToken(client)
+      const enquiryDb  = resolveDB(client, 'enquiry_submissions', ENQUIRY_DB_DEFAULT)
+      const peopleDb   = resolveDB(client, 'people', PEOPLE_DB_DEFAULT)
+      const p = Promise.all([
+        queryAll(enquiryDb, notionKey),
+        queryAll(peopleDb, notionKey).catch(() => []),
+      ]).then(([pages, people]) => {
+        const repMap = {}
+        for (const p of people) {
+          const nameProp = p.properties['Name'] || p.properties['Nama'] || p.properties['Full Name']
+          const name = getTitle(nameProp)
+          if (name) { repMap[p.id] = name; repMap[p.id.replace(/-/g, '')] = name }
         }
-      }
+        cacheSet(ck, { pages, repMap, total: pages.length })
+      }).catch(e => {
+        console.error('[crm-pipeline] bg refresh failed:', e.message)
+      }).finally(() => _inflight.delete(ck))
+      _inflight.set(ck, p)
+    }
+    return
+  }
 
-      // ── Fallback: direct Notion query (Postgres not ready) ────────────
-      const { getNotionToken, resolveDB } = await import('../../../lib/supabase.js')
+  // ── MISS: must fetch — deduplicated in-flight ─────────────────────────
+  try {
+    if (!_inflight.has(ck)) {
       const notionKey = getNotionToken(client)
       const enquiryDb = resolveDB(client, 'enquiry_submissions', ENQUIRY_DB_DEFAULT)
       const peopleDb  = resolveDB(client, 'people', PEOPLE_DB_DEFAULT)
-
-      const [pages, people] = await Promise.all([
+      const p = Promise.all([
         queryAll(enquiryDb, notionKey),
-        queryAll(peopleDb,  notionKey).catch(() => []),
-      ])
-      const repMap = {}
-      for (const p of people) {
-        const nameProp = p.properties['Name'] || p.properties['Nama'] || p.properties['Full Name']
-        const name = getTitle(nameProp)
-        if (name) { repMap[p.id] = name; repMap[p.id.replace(/-/g, '')] = name }
-      }
-      const fresh = { pages, repMap, total: pages.length }
-      cacheSet(ck, fresh)
-      return fresh
+        queryAll(peopleDb, notionKey).catch(() => []),
+      ]).then(([pages, people]) => {
+        const repMap = {}
+        for (const person of people) {
+          const nameProp = person.properties['Name'] || person.properties['Nama'] || person.properties['Full Name']
+          const name = getTitle(nameProp)
+          if (name) { repMap[person.id] = name; repMap[person.id.replace(/-/g, '')] = name }
+        }
+        const fresh = { pages, repMap, total: pages.length }
+        cacheSet(ck, fresh)
+        return fresh
+      }).finally(() => _inflight.delete(ck))
+      _inflight.set(ck, p)
     }
 
-    let cached
-    if (!hit) {
-      cached = await loadFresh()
-    } else {
-      cached = hit.data
-      if (hit.stale) {
-        // Stale — respond instantly, refresh in background
-        loadFresh().catch(e => console.error('[crm-pipeline] bg refresh error:', e.message))
-      }
-    }
-
+    const cached = await _inflight.get(ck)
+    res.setHeader('X-Cache', 'MISS')
     const stats = computeStats({ ...cached, mStart, mEnd, now })
-
-    return res.status(200).json({
-      total: cached.total,
-      ...stats,
-      updatedAt:   now.toISOString(),
-      filterMonth: { year: mYear, month: mMon },
-      dataSource:  isPostgresEnabled() ? 'postgres' : 'notion',
-    })
+    return res.status(200).json({ total: cached.total, ...stats, updatedAt: now.toISOString(), filterMonth: { year: mYear, month: mMon } })
 
   } catch (e) {
-    console.error('shin-supplies/crm-pipeline error:', e)
-    return res.status(500).json({ error: e.message })
+    console.error('[crm-pipeline] fetch error:', e.message)
+    // Circuit breaker: if stale exists, serve it rather than erroring
+    const stale = cacheGet(ck)
+    if (stale) {
+      res.setHeader('X-Cache', 'STALE')
+      const stats = computeStats({ ...stale.data, mStart, mEnd, now })
+      return res.status(200).json({ total: stale.data.total, ...stats, updatedAt: now.toISOString(), filterMonth: { year: mYear, month: mMon } })
+    }
+    return res.status(503).json({ error: 'Data unavailable — Notion API timed out and no cache available. Try again shortly.' })
   }
 }

@@ -2,7 +2,6 @@ import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
 
-// Route groups
 import pipelineRoutes   from './routes/pipeline.js'
 import documentRoutes   from './routes/documents.js'
 import clientRoutes     from './routes/client.js'
@@ -18,21 +17,15 @@ import portalRoutes     from './routes/portal/index.js'
 import proposalRoutes   from './routes/proposals/index.js'
 import privateRoutes    from './routes/private/index.js'
 
-// Postgres sync
-import { isPostgresEnabled } from './lib/db.js'
-import { syncShinSupplies }  from './lib/sync/shin-supplies.js'
-
 const app = express()
 
 app.use(cors({ origin: '*', methods: ['GET','POST','PUT','DELETE','OPTIONS'] }))
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true }))
 
-// Health check
 app.get('/', (req, res) => res.json({ ok: true, service: 'opxio-api', ts: new Date().toISOString() }))
 app.get('/health', (req, res) => res.json({ ok: true }))
 
-// Mount all routes under /api
 app.use('/api',           pipelineRoutes)
 app.use('/api',           documentRoutes)
 app.use('/api/client',    clientRoutes)
@@ -49,36 +42,11 @@ app.use('/api/portal',    portalRoutes)
 app.use('/api/proposals', proposalRoutes)
 app.use('/api/private',   privateRoutes)
 
-// 404
 app.use((req, res) => res.status(404).json({ error: 'Not found', path: req.path }))
-
-// Error handler
 app.use((err, req, res, next) => {
   console.error(err)
   res.status(500).json({ error: err.message || 'Internal server error' })
 })
 
 const PORT = process.env.PORT || 3001
-app.listen(PORT, () => {
-  console.log(`opxio-api running on port ${PORT}`)
-
-  // ── Postgres background sync ──────────────────────────────────────────
-  if (isPostgresEnabled()) {
-    // Initial sync on startup (non-blocking)
-    syncShinSupplies()
-      .then(r => console.log(`[startup] shin-supplies initial sync done: ${r.leadsCount} leads`))
-      .catch(e => console.error('[startup] shin-supplies sync failed:', e.message))
-
-    // Hourly sync — keep Postgres up to date without hammering Notion
-    const SYNC_INTERVAL_MS = 60 * 60 * 1000 // 1 hour
-    setInterval(() => {
-      syncShinSupplies()
-        .then(r => console.log(`[sync] hourly: ${r.leadsCount} leads, ${r.durationMs}ms`))
-        .catch(e => console.error('[sync] hourly failed:', e.message))
-    }, SYNC_INTERVAL_MS)
-
-    console.log('[sync] hourly sync scheduled for shin-supplies')
-  } else {
-    console.log('[sync] Postgres not configured — add DATABASE_URL to enable')
-  }
-})
+app.listen(PORT, () => console.log(`opxio-api running on port ${PORT}`))

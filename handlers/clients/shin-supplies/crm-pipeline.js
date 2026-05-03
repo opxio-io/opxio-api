@@ -207,16 +207,16 @@ function buildFetchPromise(ck, notionKey, enquiryDb, peopleDb) {
     for (const person of people) {
       const nameProp = person.properties['Name'] || person.properties['Nama'] || person.properties['Full Name']
       const roleProp = person.properties['Role'] || person.properties['role'] || person.properties['Position']
-      // Role is multi_select — use getMultiSel(); fall back to select/status for older schemas
-      const roleArr = getMultiSel(roleProp)
+      // Role must be exactly 'Sales Rep' (multi_select or select/status)
+      const roleArr    = getMultiSel(roleProp)
       const roleSingle = getStatus(roleProp) || getTitle(roleProp)
-      const roleNames = roleArr.length > 0 ? roleArr : (roleSingle ? [roleSingle] : [])
-      // Only include Sales Person role; if no Role set, include by default
-      if (roleNames.length > 0 && !roleNames.some(r => r.toLowerCase() === 'sales rep')) continue
-      // Active status filter — if Status field exists, only include 'Active' reps
-      const statusProp = person.properties['Status'] || person.properties['Active'] || person.properties['Employment Status']
+      const roleNames  = roleArr.length > 0 ? roleArr : (roleSingle ? [roleSingle] : [])
+      if (!roleNames.some(r => r.toLowerCase() === 'sales rep')) continue
+
+      // Status must be exactly 'Active'
+      const statusProp   = person.properties['Status'] || person.properties['Active'] || person.properties['Employment Status']
       const personStatus = getStatus(statusProp)
-      if (personStatus && personStatus.toLowerCase() !== 'active') continue
+      if (!personStatus || personStatus.toLowerCase() !== 'active') continue
 
       const name      = getTitle(nameProp)
       const createdAt = person.created_time || null

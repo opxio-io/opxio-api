@@ -49,4 +49,36 @@ app.use((err, req, res, next) => {
 })
 
 const PORT = process.env.PORT || 3001
-app.listen(PORT, () => console.log(`opxio-api running on port ${PORT}`))
+app.listen(PORT, () => {
+  console.log(`opxio-api running on port ${PORT}`)
+
+  // ── Cache warmer — keeps Railway awake + cache hot ────────────────────
+  // Hits the real endpoint every 4 minutes via public URL so Railway sees
+  // it as external traffic (prevents sleep) and cache stays warm.
+  const WARM_TARGETS = [
+    {
+      label: 'shin-supplies/crm-pipeline',
+      url:   'https://api.opxio.io/api/clients/shin-supplies/crm-pipeline?token=d3d18bd59d0b0a63252fe7c91264c69469a72b16fc059fd31b946c2d0b703182',
+    },
+  ]
+
+  async function warmCache() {
+    for (const target of WARM_TARGETS) {
+      try {
+        const t0 = Date.now()
+        const r  = await fetch(target.url)
+        const ms = Date.now() - t0
+        const xc = r.headers.get('x-cache') || '?'
+        console.log(`[warm] ${target.label} — ${xc} ${ms}ms`)
+      } catch (e) {
+        console.error(`[warm] ${target.label} failed:`, e.message)
+      }
+    }
+  }
+
+  // First warm after 30s (let server fully boot), then every 4 minutes
+  setTimeout(() => {
+    warmCache()
+    setInterval(warmCache, 4 * 60 * 1000)
+  }, 30_000)
+})

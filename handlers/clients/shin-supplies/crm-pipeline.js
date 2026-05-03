@@ -136,8 +136,13 @@ function computeStats({ pages, repMap, mStart, mEnd, now }) {
 
     let repName = 'Unassigned'
     if (assigned.length > 0) {
-      const rid = assigned[0]
-      repName = repMap[rid] || repMap[rid.replace(/-/g, '')] || 'Unassigned'
+      const rid     = assigned[0]
+      const repInfo = repMap[rid] || repMap[rid.replace(/-/g, '')]
+      if (repInfo) {
+        // Only show rep in a month if they existed (were created) before that month ended
+        const repCreated = repInfo.createdAt ? new Date(repInfo.createdAt) : null
+        if (!repCreated || repCreated < mEnd) repName = repInfo.name
+      }
     }
     if (!repStats[repName]) repStats[repName] = { closedWon: 0, closedLost: 0, activePipeline: 0, activities: 0, followupsToday: 0 }
 
@@ -208,8 +213,18 @@ function buildFetchPromise(ck, notionKey, enquiryDb, peopleDb) {
       const roleNames = roleArr.length > 0 ? roleArr : (roleSingle ? [roleSingle] : [])
       // Only include Sales Person role; if no Role set, include by default
       if (roleNames.length > 0 && !roleNames.some(r => r.toLowerCase() === 'sales person')) continue
-      const name = getTitle(nameProp)
-      if (name) { repMap[person.id] = name; repMap[person.id.replace(/-/g, '')] = name }
+      // Active status filter — if Status field exists, only include 'Active' reps
+      const statusProp = person.properties['Status'] || person.properties['Active'] || person.properties['Employment Status']
+      const personStatus = getStatus(statusProp)
+      if (personStatus && personStatus.toLowerCase() !== 'active') continue
+
+      const name      = getTitle(nameProp)
+      const createdAt = person.created_time || null
+      if (name) {
+        const entry = { name, createdAt }
+        repMap[person.id]                      = entry
+        repMap[person.id.replace(/-/g, '')] = entry
+      }
     }
     const fresh = { pages, repMap, total: pages.length }
     cacheSet(ck, fresh)

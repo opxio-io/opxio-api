@@ -3,26 +3,54 @@
 //
 // Cache strategy (fastest → slowest):
 //   1. In-memory cache — HIT: return instantly, no I/O
-//   2. In-flight dedup — if a Notion fetch is already running, wait for it (no duplicate calls)
-//   3. Notion API — with 8s timeout + circuit breaker (serve STALE on timeout, error if no cache)
+//   2. In-flight dedup — concurrent cold-cache requests share one Notion call
+//   3. Notion API — queued (max 3 concurrent), 8s timeout, circuit breaker
 //
 // X-Cache header: HIT | STALE | MISS
 
 import { getClientByToken, getNotionToken, resolveDB } from "../../../lib/supabase.js"
-import { cacheGet, cacheSet, cacheKey } from "../../../lib/cache.js"
+import { cacheGet, cacheSet, cacheKey }                from "../../../lib/cache.js"
+import { notionQueue }                                  from "../../../lib/queue.js"
+import { createClient }                                 from "@supabase/supabase-js"
 
 const ENQUIRY_DB_DEFAULT = '71c9ba4af0694291876bf78422805f18'
 const PEOPLE_DB_DEFAULT  = '34cfe60097f680e1bac0e75b431bc325'
 const EXCLUDED           = ['Unassigned', 'Nurhan']
 const STAGE_ORDER        = ['New Lead', 'Quotation Sent', 'Negotiation', 'Sales Order Issued', 'Closed Won', 'Closed Lost']
-const NOTION_TIMEOUT_MS  = 8_000  // give up on Notion after 8s, serve stale
+const NOTION_TIMEOUT_MS  = 8_000
 
 // ── In-flight deduplication ───────────────────────────────────────────────
-// If two requests arrive simultaneously on a cold cache, only ONE Notion call
-// is made. The second request waits for the same promise.
 const _inflight = new Map()
 
-// ── Notion query with timeout ─────────────────────────────────────────────
+// ── Supabase client for async logging ────────────────────────────────────
+let _sb = null
+function getSb() {
+  if (!_sb && process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY) {
+    _sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY, {
+      auth: { persistSession: false }
+    })
+  }
+  return _sb
+}
+
+// ── Async usage logger (fire-and-forget, never blocks response) ───────────
+function logUsage({ clientId, cacheStatus, latencyMs, httpStatus = 200, error = null }) {
+  const sb = getSb()
+  if (!sb) return
+  sb.from('api_usage').insert({
+    client_id:     clientId,
+    endpoint:      'shin-supplies/crm-pipeline',
+    cache_status:  cacheStatus,
+    latency_ms:    Math.round(latencyMs),
+    http_status:   httpStatus,
+    error_message: error,
+    timestamp:     new Date().toISOString(),
+  }).then(({ error: e }) => {
+    if (e) console.error('[log] api_usage insert failed:', e.message)
+  })
+}
+
+// ── Notion paginator — queued + timeout ──────────────────────────────────
 async function queryAll(dbId, notionKey) {
   const headers = {
     Authorization:    `Bearer ${notionKey}`,
@@ -31,16 +59,19 @@ async function queryAll(dbId, notionKey) {
   }
   let results = [], hasMore = true, cursor
   while (hasMore) {
-    const ctrl = new AbortController()
+    const ctrl  = new AbortController()
     const timer = setTimeout(() => ctrl.abort(), NOTION_TIMEOUT_MS)
     try {
       const body = { page_size: 100 }
       if (cursor) body.start_cursor = cursor
-      const r = await fetch(`https://api.notion.com/v1/databases/${dbId}/query`, {
-        method: 'POST', headers, body: JSON.stringify(body), signal: ctrl.signal,
+      // Each page fetch goes through the shared Notion queue (max 3 concurrent)
+      const d = await notionQueue.add(async () => {
+        const r = await fetch(`https://api.notion.com/v1/databases/${dbId}/query`, {
+          method: 'POST', headers, body: JSON.stringify(body), signal: ctrl.signal,
+        })
+        if (!r.ok) throw new Error(`Notion ${r.status}: ${await r.text()}`)
+        return r.json()
       })
-      if (!r.ok) throw new Error(`Notion ${r.status}: ${await r.text()}`)
-      const d = await r.json()
       results = results.concat(d.results)
       hasMore  = d.has_more
       cursor   = d.next_cursor
@@ -59,7 +90,7 @@ const getCheckbox = p => p?.checkbox === true
 const getRelIds   = p => (p?.relation     || []).map(r => r.id)
 const getMultiSel = p => (p?.multi_select || []).map(s => s.name)
 
-// ── Stats computation (pure — no I/O) ────────────────────────────────────
+// ── Stats computation (pure) ──────────────────────────────────────────────
 function computeStats({ pages, repMap, mStart, mEnd, now }) {
   const today = now.toISOString().slice(0, 10)
   const d3    = new Date(now); d3.setDate(now.getDate() + 3)
@@ -140,6 +171,27 @@ function computeStats({ pages, repMap, mStart, mEnd, now }) {
   }
 }
 
+// ── Shared fetch logic (used by MISS and background STALE refresh) ────────
+function buildFetchPromise(ck, notionKey, enquiryDb, peopleDb) {
+  if (_inflight.has(ck)) return _inflight.get(ck)
+  const p = Promise.all([
+    queryAll(enquiryDb, notionKey),
+    queryAll(peopleDb,  notionKey).catch(() => []),
+  ]).then(([pages, people]) => {
+    const repMap = {}
+    for (const person of people) {
+      const nameProp = person.properties['Name'] || person.properties['Nama'] || person.properties['Full Name']
+      const name = getTitle(nameProp)
+      if (name) { repMap[person.id] = name; repMap[person.id.replace(/-/g, '')] = name }
+    }
+    const fresh = { pages, repMap, total: pages.length }
+    cacheSet(ck, fresh)
+    return fresh
+  }).finally(() => _inflight.delete(ck))
+  _inflight.set(ck, p)
+  return p
+}
+
 // ── Request handler ───────────────────────────────────────────────────────
 export async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
@@ -147,6 +199,7 @@ export async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization')
   if (req.method === 'OPTIONS') return res.status(200).end()
 
+  const t0    = Date.now()
   const token = req.query.token || req.headers['x-widget-token']
   if (!token) return res.status(401).json({ error: 'Missing token' })
   const client = await getClientByToken(token)
@@ -160,82 +213,40 @@ export async function handler(req, res) {
   const mStart = new Date(mYear, mMon, 1)
   const mEnd   = new Date(mYear, mMon + 1, 1)
 
-  const ck  = cacheKey('shin-supplies:crm-pipeline', client.id)
-  const hit = cacheGet(ck)
+  const ck         = cacheKey('shin-supplies:crm-pipeline', client.id)
+  const hit        = cacheGet(ck)
+  const notionKey  = getNotionToken(client)
+  const enquiryDb  = resolveDB(client, 'enquiry_submissions', ENQUIRY_DB_DEFAULT)
+  const peopleDb   = resolveDB(client, 'people', PEOPLE_DB_DEFAULT)
 
-  // ── HIT: fresh cache — return instantly ──────────────────────────────
-  if (hit && !hit.stale) {
-    res.setHeader('X-Cache', 'HIT')
-    const stats = computeStats({ ...hit.data, mStart, mEnd, now })
-    return res.status(200).json({ total: hit.data.total, ...stats, updatedAt: now.toISOString(), filterMonth: { year: mYear, month: mMon } })
+  function respond(data, cacheStatus) {
+    res.setHeader('X-Cache', cacheStatus)
+    const stats = computeStats({ ...data, mStart, mEnd, now })
+    res.status(200).json({ total: data.total, ...stats, updatedAt: now.toISOString(), filterMonth: { year: mYear, month: mMon } })
+    logUsage({ clientId: client.id, cacheStatus, latencyMs: Date.now() - t0 })
   }
 
-  // ── STALE: serve immediately, refresh in background ──────────────────
+  // ── HIT ────────────────────────────────────────────────────────────────
+  if (hit && !hit.stale) return respond(hit.data, 'HIT')
+
+  // ── STALE: respond immediately, refresh in background ─────────────────
   if (hit && hit.stale) {
-    res.setHeader('X-Cache', 'STALE')
-    const stats = computeStats({ ...hit.data, mStart, mEnd, now })
-    res.status(200).json({ total: hit.data.total, ...stats, updatedAt: now.toISOString(), filterMonth: { year: mYear, month: mMon } })
-    // Background refresh — deduplicated
-    if (!_inflight.has(ck)) {
-      const notionKey  = getNotionToken(client)
-      const enquiryDb  = resolveDB(client, 'enquiry_submissions', ENQUIRY_DB_DEFAULT)
-      const peopleDb   = resolveDB(client, 'people', PEOPLE_DB_DEFAULT)
-      const p = Promise.all([
-        queryAll(enquiryDb, notionKey),
-        queryAll(peopleDb, notionKey).catch(() => []),
-      ]).then(([pages, people]) => {
-        const repMap = {}
-        for (const p of people) {
-          const nameProp = p.properties['Name'] || p.properties['Nama'] || p.properties['Full Name']
-          const name = getTitle(nameProp)
-          if (name) { repMap[p.id] = name; repMap[p.id.replace(/-/g, '')] = name }
-        }
-        cacheSet(ck, { pages, repMap, total: pages.length })
-      }).catch(e => {
-        console.error('[crm-pipeline] bg refresh failed:', e.message)
-      }).finally(() => _inflight.delete(ck))
-      _inflight.set(ck, p)
-    }
+    respond(hit.data, 'STALE')
+    buildFetchPromise(ck, notionKey, enquiryDb, peopleDb)
+      .catch(e => console.error('[crm-pipeline] bg refresh failed:', e.message))
     return
   }
 
-  // ── MISS: must fetch — deduplicated in-flight ─────────────────────────
+  // ── MISS: fetch, deduplicated ──────────────────────────────────────────
   try {
-    if (!_inflight.has(ck)) {
-      const notionKey = getNotionToken(client)
-      const enquiryDb = resolveDB(client, 'enquiry_submissions', ENQUIRY_DB_DEFAULT)
-      const peopleDb  = resolveDB(client, 'people', PEOPLE_DB_DEFAULT)
-      const p = Promise.all([
-        queryAll(enquiryDb, notionKey),
-        queryAll(peopleDb, notionKey).catch(() => []),
-      ]).then(([pages, people]) => {
-        const repMap = {}
-        for (const person of people) {
-          const nameProp = person.properties['Name'] || person.properties['Nama'] || person.properties['Full Name']
-          const name = getTitle(nameProp)
-          if (name) { repMap[person.id] = name; repMap[person.id.replace(/-/g, '')] = name }
-        }
-        const fresh = { pages, repMap, total: pages.length }
-        cacheSet(ck, fresh)
-        return fresh
-      }).finally(() => _inflight.delete(ck))
-      _inflight.set(ck, p)
-    }
-
-    const cached = await _inflight.get(ck)
-    res.setHeader('X-Cache', 'MISS')
-    const stats = computeStats({ ...cached, mStart, mEnd, now })
-    return res.status(200).json({ total: cached.total, ...stats, updatedAt: now.toISOString(), filterMonth: { year: mYear, month: mMon } })
-
+    const data = await buildFetchPromise(ck, notionKey, enquiryDb, peopleDb)
+    respond(data, 'MISS')
   } catch (e) {
     console.error('[crm-pipeline] fetch error:', e.message)
-    // Circuit breaker: if stale exists, serve it rather than erroring
+    // Circuit breaker: check for any stale entry one more time
     const stale = cacheGet(ck)
-    if (stale) {
-      res.setHeader('X-Cache', 'STALE')
-      const stats = computeStats({ ...stale.data, mStart, mEnd, now })
-      return res.status(200).json({ total: stale.data.total, ...stats, updatedAt: now.toISOString(), filterMonth: { year: mYear, month: mMon } })
-    }
-    return res.status(503).json({ error: 'Data unavailable — Notion API timed out and no cache available. Try again shortly.' })
+    if (stale) return respond(stale.data, 'STALE')
+    logUsage({ clientId: client.id, cacheStatus: 'MISS', latencyMs: Date.now() - t0, httpStatus: 503, error: e.message })
+    res.status(503).json({ error: 'Notion API unavailable and no cache exists. Try again shortly.' })
   }
 }

@@ -110,6 +110,7 @@ function computeStats({ pages, repMap, mStart, mEnd, now }) {
 
   let monthLeads = 0, quotationsSent = 0, closedWon = 0, closedLost = 0
   let followupsToday = 0, followupsNext3 = 0, overdueResponse = 0
+  let daysToCloseSum = 0, daysToCloseCount = 0, quoteToWinSum = 0, quoteToWinCount = 0
 
   const stageCount = {}, productCount = {}, sourceCount = {}, sourceClosedCount = {}, repStats = {}
 
@@ -118,6 +119,7 @@ function computeStats({ pages, repMap, mStart, mEnd, now }) {
     const status    = getStatus(p['Status'])
     const submAt    = getDate(p['Submitted At'])
     const quoIssued = getCheckbox(p['Quotation Issued'])
+    const quoSentDate = getDate(p['Quotation Sent Date'])
     const nextFU    = getDate(p['Next Follow-up Date'])
     const assigned  = getRelIds(p['Assigned To'])
     const products  = getMultiSel(p['Kategori produk'])
@@ -151,7 +153,12 @@ function computeStats({ pages, repMap, mStart, mEnd, now }) {
       }
       if (status !== 'New Lead') {
         quotationsSent++
-        if (isWon)  { closedWon++;  repStats[repName].closedWon++ }
+        if (isWon)  {
+          closedWon++;  repStats[repName].closedWon++
+          const wonDate = new Date(page.last_edited_time)
+          if (submDate) { daysToCloseSum += (wonDate - submDate) / 86400000; daysToCloseCount++ }
+          if (quoSentDate) { quoteToWinSum += (wonDate - new Date(quoSentDate)) / 86400000; quoteToWinCount++ }
+        }
         if (isLost) { closedLost++; repStats[repName].closedLost = (repStats[repName].closedLost || 0) + 1 }
       }
     }
@@ -164,7 +171,9 @@ function computeStats({ pages, repMap, mStart, mEnd, now }) {
     if (!isClosed) repStats[repName].activePipeline++
   }
 
-  const closeRate    = quotationsSent > 0 ? Math.round((closedWon / quotationsSent) * 100) : null
+  const closeRate      = quotationsSent > 0 ? Math.round((closedWon / quotationsSent) * 100) : null
+  const avgDaysToClose = daysToCloseCount > 0 ? Math.round(daysToCloseSum / daysToCloseCount) : null
+  const avgQuoteToWin  = quoteToWinCount  > 0 ? Math.round(quoteToWinSum  / quoteToWinCount)  : null
   const stageFunnel  = STAGE_ORDER.map(s => ({ stage: s, count: stageCount[s] || 0 }))
   const repBreakdown = Object.entries(repStats)
     .filter(([name]) => !EXCLUDED.includes(name))
@@ -172,7 +181,7 @@ function computeStats({ pages, repMap, mStart, mEnd, now }) {
     .sort((a, b) => b.closedWon - a.closedWon || b.activePipeline - a.activePipeline)
 
   return {
-    monthLeads, quotationsSent, closedWon, closedLost, closeRate,
+    monthLeads, quotationsSent, closedWon, closedLost, closeRate, avgDaysToClose, avgQuoteToWin,
     live: { followupsToday, followupsNext3, overdueResponse },
     stageFunnel, repBreakdown,
     productBreakdown: productCount,

@@ -201,6 +201,10 @@ function buildFetchPromise(ck, notionKey, enquiryDb, peopleDb) {
     const repMap = {}
     for (const person of people) {
       const nameProp = person.properties['Name'] || person.properties['Nama'] || person.properties['Full Name']
+      const roleProp = person.properties['Role'] || person.properties['role'] || person.properties['Position']
+      const role = getStatus(roleProp) || getTitle(roleProp)
+      // Only include Sales Person role in rep breakdown
+      if (role && role.toLowerCase() !== 'sales person') continue
       const name = getTitle(nameProp)
       if (name) { repMap[person.id] = name; repMap[person.id.replace(/-/g, '')] = name }
     }

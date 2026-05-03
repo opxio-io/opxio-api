@@ -164,8 +164,7 @@ function computeStats({ pages, repMap, mStart, mEnd, now }) {
     if (!isClosed) repStats[repName].activePipeline++
   }
 
-  const totalDecided = closedWon + closedLost
-  const closeRate    = totalDecided > 0 ? Math.round((closedWon / totalDecided) * 100) : null
+  const closeRate    = quotationsSent > 0 ? Math.round((closedWon / quotationsSent) * 100) : null
   const stageFunnel  = STAGE_ORDER.map(s => ({ stage: s, count: stageCount[s] || 0 }))
   const repBreakdown = Object.entries(repStats)
     .filter(([name]) => !EXCLUDED.includes(name))

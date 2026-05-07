@@ -200,7 +200,7 @@ export async function handler(req, res) {
 
       // Content Editing: QC approved → Upload Link (not Done yet — upload required first)
       if (isEditing) {
-        await patch(taskPageId, { 'Task Status': { status: { name: 'Upload Link' } } });
+        await patch(taskPageId, { 'Task Status': { status: { name: 'Upload Link' } }, 'Latest QC Date': { date: { start: now } } });
         await clearActionMessage(taskPageId);
         return res.status(200).json({
           success: true, action,
@@ -227,7 +227,7 @@ export async function handler(req, res) {
       const isLastTask    = contentId && currentOrder !== null && nextTask === null;
       const newTaskStatus = isLastTask ? 'Ready for Posting' : 'Done';
 
-      await patch(taskPageId, { 'Task Status': { status: { name: newTaskStatus } } });
+      await patch(taskPageId, { 'Task Status': { status: { name: newTaskStatus } }, 'Latest QC Date': { date: { start: now } } });
 
       let cascadeResult = null;
       try {

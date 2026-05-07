@@ -17,6 +17,15 @@ import portalRoutes     from './routes/portal/index.js'
 import proposalRoutes   from './routes/proposals/index.js'
 import privateRoutes    from './routes/private/index.js'
 
+// ── Global crash guards ─────────────────────────────────────────────────────
+// Prevent a single bad promise from killing the whole Railway process.
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[crash-guard] Unhandled rejection:', reason)
+})
+process.on('uncaughtException', (err) => {
+  console.error('[crash-guard] Uncaught exception:', err)
+})
+
 const app = express()
 
 app.use(cors({ origin: '*', methods: ['GET','POST','PUT','DELETE','OPTIONS'] }))
@@ -116,14 +125,22 @@ app.listen(PORT, () => {
 
   async function warmCache() {
     for (const target of WARM_TARGETS) {
+      const ac = new AbortController()
+      const timer = setTimeout(() => ac.abort(), 15_000) // 15s max per endpoint
       try {
         const t0 = Date.now()
-        const r  = await fetch(target.url)
+        const r  = await fetch(target.url, { signal: ac.signal })
+        clearTimeout(timer)
         const ms = Date.now() - t0
         const xc = r.headers.get('x-cache') || '?'
         console.log(`[warm] ${target.label} — ${xc} ${ms}ms`)
       } catch (e) {
-        console.error(`[warm] ${target.label} failed:`, e.message)
+        clearTimeout(timer)
+        if (e.name === 'AbortError') {
+          console.warn(`[warm] ${target.label} — timed out after 15s`)
+        } else {
+          console.error(`[warm] ${target.label} failed:`, e.message)
+        }
       }
     }
   }

@@ -50,7 +50,7 @@ function widgetOriginGuard(req, res, next) {
   next()
 }
 
-app.get('/', (req, res) => res.json({ ok: true, service: 'opxio-api', ts: new Date().toISOString() }))
+app.get('/', (req, res) => res.json({ ok: true, service: 'opxio-api', v: 'b029ea8', ts: new Date().toISOString() }))
 app.get('/health', (req, res) => res.json({ ok: true }))
 
 app.use('/api',           pipelineRoutes)

@@ -170,21 +170,27 @@ export async function handler(req, res) {
     // ── APPROVE QC ────────────────────────────────────────────────────────────
     if (action === 'approve_qc') {
       // ── Email-based access control ─────────────────────────────────────────
-      // Allowlist is read from client.labels.qc_approver_emails (Supabase).
-      // Falls back to hardcoded list if not configured.
+      // Reads the Notion user's email from the webhook payload (body.source.user).
+      // Notion includes the clicking user automatically on every button webhook.
+      // Allowlist is read from client.labels.qc_approver_emails (Supabase),
+      // falling back to the hardcoded list if not configured.
       const QC_APPROVER_EMAILS = (client.labels?.qc_approver_emails || [
         'hello@creaitorsofficial.com',
         'operations@creaitorsofficial.com',
       ]).map(e => e.toLowerCase());
 
-      const staffId    = body.staff_id || req.query.staff_id || null;
-      const staffEntry = staffId ? (client.labels?.workspace_staff?.[staffId] || null) : null;
-      const staffEmail = (staffEntry?.email || '').toLowerCase().trim();
+      const notionUserEmail = (
+        body.source?.user?.person?.email ||
+        body.user?.person?.email ||
+        body.triggered_by?.person?.email ||
+        req.query.email ||
+        ''
+      ).toLowerCase().trim();
 
-      if (!staffId || !staffEmail || !QC_APPROVER_EMAILS.includes(staffEmail)) {
+      if (!notionUserEmail || !QC_APPROVER_EMAILS.includes(notionUserEmail)) {
         return actionError(
           taskPageId,
-          'QC approval is restricted. Your account does not have permission to approve QC. Contact your manager if you believe this is an error.'
+          `QC approval is restricted. "${notionUserEmail || 'Unknown user'}" does not have permission to approve QC.`
         );
       }
       // ── End access control ─────────────────────────────────────────────────

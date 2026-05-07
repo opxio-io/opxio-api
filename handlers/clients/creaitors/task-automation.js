@@ -169,6 +169,26 @@ export async function handler(req, res) {
 
     // ── APPROVE QC ────────────────────────────────────────────────────────────
     if (action === 'approve_qc') {
+      // ── Email-based access control ─────────────────────────────────────────
+      // Allowlist is read from client.labels.qc_approver_emails (Supabase).
+      // Falls back to hardcoded list if not configured.
+      const QC_APPROVER_EMAILS = (client.labels?.qc_approver_emails || [
+        'hello@creaitorsofficial.com',
+        'operations@creaitorsofficial.com',
+      ]).map(e => e.toLowerCase());
+
+      const staffId    = body.staff_id || req.query.staff_id || null;
+      const staffEntry = staffId ? (client.labels?.workspace_staff?.[staffId] || null) : null;
+      const staffEmail = (staffEntry?.email || '').toLowerCase().trim();
+
+      if (!staffId || !staffEmail || !QC_APPROVER_EMAILS.includes(staffEmail)) {
+        return actionError(
+          taskPageId,
+          'QC approval is restricted. Your account does not have permission to approve QC. Contact your manager if you believe this is an error.'
+        );
+      }
+      // ── End access control ─────────────────────────────────────────────────
+
       const currentStatus    = props['Task Status']?.status?.name || '';
       const currentOrder     = props['Order']?.number ?? null;
       const contentLinks     = props['Content Production']?.relation || [];

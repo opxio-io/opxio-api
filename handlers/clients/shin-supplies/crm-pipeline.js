@@ -12,6 +12,7 @@ import { getClientByToken, getNotionToken, resolveDB } from "../../../lib/supaba
 import { cacheGet, cacheSet, cacheKey, cacheDelete }    from "../../../lib/cache.js"
 import { notionQueue }                                  from "../../../lib/queue.js"
 import { createClient }                                 from "@supabase/supabase-js"
+import ws                                               from 'ws'
 
 const ENQUIRY_DB_DEFAULT = '71c9ba4af0694291876bf78422805f18'
 const PEOPLE_DB_DEFAULT  = '34cfe60097f680e1bac0e75b431bc325'
@@ -27,7 +28,8 @@ let _sb = null
 function getSb() {
   if (!_sb && process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY) {
     _sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY, {
-      auth: { persistSession: false }
+      auth: { persistSession: false },
+      realtime: { transport: ws },
     })
   }
   return _sb

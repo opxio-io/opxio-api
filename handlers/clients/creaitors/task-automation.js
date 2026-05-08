@@ -186,11 +186,11 @@ export async function handler(req, res) {
       ).toLowerCase().trim();
 
       if (!notionUserEmail) {
-        // Notion button webhooks send the clicking user's ID at body.user_id
+        // Notion button webhooks send the clicking user's ID at body.source.user_id
         const userId =
+          body.source?.user_id ||
           body.user_id ||
           body.source?.user?.id ||
-          body.user?.id ||
           null;
         console.log('[approve_qc] user id from payload:', userId);
         if (userId) {

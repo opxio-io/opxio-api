@@ -7,15 +7,29 @@ import documentRoutes   from './routes/documents.js'
 import clientRoutes     from './routes/client.js'
 import adminRoutes      from './routes/admin.js'
 import dataRoutes       from './routes/data/index.js'
-import creaitorRoutes   from './routes/clients/creaitors/index.js'
-import marketingRoutes  from './routes/clients/creaitors/marketing/index.js'
-import operationsRoutes from './routes/clients/creaitors/operations/index.js'
-import cupterraRoutes   from './routes/clients/shin-supplies/index.js'
-import revenueRoutes    from './routes/clients/creaitors/revenue/index.js'
-import executiveRoutes  from './routes/clients/creaitors/executive/index.js'
 import portalRoutes     from './routes/portal/index.js'
 import proposalRoutes   from './routes/proposals/index.js'
 import privateRoutes    from './routes/private/index.js'
+
+// ── Safe dynamic loader for client routes ───────────────────────────────────
+// If one client's handler has a syntax/import error, only that client goes
+// down — the rest of the server stays up and serves other clients normally.
+async function safeImport(path, label) {
+  try {
+    const mod = await import(path)
+    return mod.default
+  } catch (err) {
+    console.error(`[client-boundary] Failed to load ${label}:`, err.message)
+    // Return a dead-route express Router that always responds 503
+    const { Router } = await import('express')
+    const dead = Router()
+    dead.all('*', (req, res) => res.status(503).json({
+      error: `${label} is temporarily unavailable`,
+      detail: err.message,
+    }))
+    return dead
+  }
+}
 
 // ── Global crash guards ─────────────────────────────────────────────────────
 // Prevent a single bad promise from killing the whole Railway process.
@@ -88,6 +102,24 @@ app.use((err, req, res, next) => {
 })
 
 const PORT = process.env.PORT || 3001
+
+// ── Load client routes dynamically (isolated per client) ────────────────────
+const [
+  creaitorRoutes,
+  marketingRoutes,
+  operationsRoutes,
+  revenueRoutes,
+  executiveRoutes,
+  cupterraRoutes,
+] = await Promise.all([
+  safeImport('./routes/clients/creaitors/index.js',            'creaitors'),
+  safeImport('./routes/clients/creaitors/marketing/index.js',  'creaitors/marketing'),
+  safeImport('./routes/clients/creaitors/operations/index.js', 'creaitors/operations'),
+  safeImport('./routes/clients/creaitors/revenue/index.js',    'creaitors/revenue'),
+  safeImport('./routes/clients/creaitors/executive/index.js',  'creaitors/executive'),
+  safeImport('./routes/clients/shin-supplies/index.js',        'shin-supplies'),
+])
+
 app.listen(PORT, () => {
   console.log(`opxio-api running on port ${PORT}`)
 

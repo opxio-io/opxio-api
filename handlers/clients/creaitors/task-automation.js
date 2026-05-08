@@ -169,6 +169,8 @@ export async function handler(req, res) {
 
     // ── APPROVE QC ────────────────────────────────────────────────────────────
     if (action === 'approve_qc') {
+      // TEMP: dump full body so we can see Notion webhook structure
+      console.log('[approve_qc] FULL BODY:', JSON.stringify(body, null, 2))
       // ── Email-based access control ───────────────────────────────────────────
       const QC_APPROVER_EMAILS = (client.labels?.qc_approver_emails || [
         'hello@creaitorsofficial.com',

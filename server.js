@@ -64,7 +64,7 @@ function widgetOriginGuard(req, res, next) {
   next()
 }
 
-app.get('/', (req, res) => res.json({ ok: true, service: 'opxio-api', v: 'ws-fix', ts: new Date().toISOString() }))
+app.get('/', (req, res) => res.json({ ok: true, service: 'opxio-api', v: 'email-fix-v2', ts: new Date().toISOString() }))
 app.get('/health', (req, res) => res.json({ ok: true }))
 
 app.use('/api',           pipelineRoutes)
@@ -94,6 +94,13 @@ app.use('/api/clients/shin-supplies', widgetOriginGuard, cupterraRoutes)
 app.use('/api/portal',    portalRoutes)
 app.use('/api/proposals', proposalRoutes)
 app.use('/api/private',   privateRoutes)
+
+// ── Temp debug endpoint — logs raw Notion webhook payload ───────────────────
+app.post('/api/debug-webhook', (req, res) => {
+  console.log('[debug-webhook] headers:', JSON.stringify(req.headers, null, 2))
+  console.log('[debug-webhook] body:', JSON.stringify(req.body, null, 2))
+  res.json({ received: true, body: req.body })
+})
 
 app.use((req, res) => res.status(404).json({ error: 'Not found', path: req.path }))
 app.use((err, req, res, next) => {

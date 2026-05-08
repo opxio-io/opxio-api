@@ -168,54 +168,55 @@ export async function handler(req, res) {
     }
 
     // ── APPROVE QC ────────────────────────────────────────────────────────────
-   // ── Email-based access control ─────────────────────────────────────────
-const QC_APPROVER_EMAILS = (client.labels?.qc_approver_emails || [
-  'hello@creaitorsofficial.com',
-  'operations@creaitorsofficial.com',
-]).map(e => e.toLowerCase());
+    if (action === 'approve_qc') {
+      // ── Email-based access control ───────────────────────────────────────────
+      const QC_APPROVER_EMAILS = (client.labels?.qc_approver_emails || [
+        'hello@creaitorsofficial.com',
+        'operations@creaitorsofficial.com',
+      ]).map(e => e.toLowerCase());
 
-// Notion webhook payloads only send user.id — no email in the payload itself.
-// Try direct email first (future-proofing), then fall back to Users API lookup.
-let notionUserEmail = (
-  body.source?.user?.person?.email ||
-  body.user?.person?.email ||
-  body.triggered_by?.person?.email ||
-  req.query.email ||
-  ''
-).toLowerCase().trim();
+      // Notion webhook payloads only send user.id — no email in the payload itself.
+      // Try direct email first (future-proofing), then fall back to Users API lookup.
+      let notionUserEmail = (
+        body.source?.user?.person?.email ||
+        body.user?.person?.email ||
+        body.triggered_by?.person?.email ||
+        req.query.email ||
+        ''
+      ).toLowerCase().trim();
 
-if (!notionUserEmail) {
-  const userId =
-    body.source?.user?.id ||
-    body.user?.id ||
-    body.triggered_by?.id ||
-    null;
-  console.log('[approve_qc] user id from payload:', userId);
-  if (userId) {
-    try {
-      const userRes = await fetch(`https://api.notion.com/v1/users/${userId}`, { headers });
-      if (userRes.ok) {
-        const userData = await userRes.json();
-        notionUserEmail = (userData.person?.email || '').toLowerCase().trim();
-        console.log('[approve_qc] email resolved via Users API:', notionUserEmail);
-      } else {
-        console.warn('[approve_qc] Users API returned:', userRes.status);
+      if (!notionUserEmail) {
+        const userId =
+          body.source?.user?.id ||
+          body.user?.id ||
+          body.triggered_by?.id ||
+          null;
+        console.log('[approve_qc] user id from payload:', userId);
+        if (userId) {
+          try {
+            const userRes = await fetch(`https://api.notion.com/v1/users/${userId}`, { headers });
+            if (userRes.ok) {
+              const userData = await userRes.json();
+              notionUserEmail = (userData.person?.email || '').toLowerCase().trim();
+              console.log('[approve_qc] email resolved via Users API:', notionUserEmail);
+            } else {
+              console.warn('[approve_qc] Users API returned:', userRes.status);
+            }
+          } catch (e) {
+            console.error('[approve_qc] user lookup failed:', e.message);
+          }
+        }
       }
-    } catch (e) {
-      console.error('[approve_qc] user lookup failed:', e.message);
-    }
-  }
-}
 
-console.log('[approve_qc] final email:', notionUserEmail, '| allowlist:', QC_APPROVER_EMAILS);
+      console.log('[approve_qc] final email:', notionUserEmail, '| allowlist:', QC_APPROVER_EMAILS);
 
-if (!notionUserEmail || !QC_APPROVER_EMAILS.includes(notionUserEmail)) {
-  return actionError(
-    taskPageId,
-    `QC approval is restricted. "${notionUserEmail || 'Unknown user'}" does not have permission to approve QC.`
-  );
-}
-// ── End access control ─────────────────────────────────────────────────
+      if (!notionUserEmail || !QC_APPROVER_EMAILS.includes(notionUserEmail)) {
+        return actionError(
+          taskPageId,
+          `QC approval is restricted. "${notionUserEmail || 'Unknown user'}" does not have permission to approve QC.`
+        );
+      }
+      // ── End access control ───────────────────────────────────────────────────
       const currentStatus    = props['Task Status']?.status?.name || '';
       const currentOrder     = props['Order']?.number ?? null;
       const contentLinks     = props['Content Production']?.relation || [];

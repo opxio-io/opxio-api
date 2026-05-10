@@ -14,8 +14,8 @@ import { notionQueue }                                  from "../../../lib/queue
 import { createClient }                                 from "@supabase/supabase-js"
 import ws                                               from 'ws'
 
-const ENQUIRY_DB_DEFAULT = '71c9ba4af0694291876bf78422805f18'
-const PEOPLE_DB_DEFAULT  = '34cfe60097f680e1bac0e75b431bc325'
+const ENQUIRY_DB_DEFAULT = 'cbebbbc47d4d827fa66801097f224dfc'
+const PEOPLE_DB_DEFAULT  = '5ecbbbc47d4d82f9849901b44678eb75'
 const EXCLUDED           = ['Unassigned', 'Nurhan']
 const STAGE_ORDER        = ['New Lead', 'Quotation Sent', 'Negotiation', 'Sales Order Issued', 'Closed Won', 'Closed Lost']
 const NOTION_TIMEOUT_MS  = 8_000

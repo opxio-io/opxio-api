@@ -52,7 +52,7 @@ const WIDGET_ORIGINS = [
 function widgetOriginGuard(req, res, next) {
   const origin = req.headers.origin || ''
   const isLocal = origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1')
-  const isAllowed = !origin || isLocal || WIDGET_ORIGINS.some(o => origin === o)
+  const isAllowed = !origin || origin === 'null' || isLocal || WIDGET_ORIGINS.some(o => origin === o)
   if (!isAllowed) return res.status(403).json({ error: 'Forbidden' })
   next()
 }

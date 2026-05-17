@@ -89,6 +89,7 @@ async function startServer() {
     revenueRoutes,
     executiveRoutes,
     cupterraRoutes,
+    opxioRoutes,
   ] = await Promise.all([
     safeImport('./routes/clients/creaitors/index.js',            'creaitors'),
     safeImport('./routes/clients/creaitors/marketing/index.js',  'creaitors/marketing'),
@@ -96,6 +97,7 @@ async function startServer() {
     safeImport('./routes/clients/creaitors/revenue/index.js',    'creaitors/revenue'),
     safeImport('./routes/clients/creaitors/executive/index.js',  'creaitors/executive'),
     safeImport('./routes/clients/shin-supplies/index.js',        'shin-supplies'),
+    safeImport('./routes/clients/opxio/index.js',                'opxio'),
   ])
 
   // Creaitors — legacy paths (keep for backward compat)
@@ -115,6 +117,9 @@ async function startServer() {
   // Shin Supplies
   app.use('/api/cupterra',              widgetOriginGuard, cupterraRoutes)
   app.use('/api/clients/shin-supplies', widgetOriginGuard, cupterraRoutes)
+
+  // Opxio internal
+  app.use('/api/clients/opxio', widgetOriginGuard, opxioRoutes)
 
   app.use((req, res) => res.status(404).json({ error: 'Not found', path: req.path }))
   app.use((err, req, res, next) => {

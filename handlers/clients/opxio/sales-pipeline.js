@@ -112,8 +112,8 @@ export async function handler(req, res) {
     // Open leads
     if (LEAD_OPEN.has(stage)) {
       openLeads++
-      if (qual === 'Hot') hotLeads.push(name)
-      if (lastFU && lastFU <= today) followupDue.push({ name, lastFU })
+      if (qual === 'Hot' && name && name !== 'undefined' && name.trim().length > 2) hotLeads.push(name)
+      if (lastFU && lastFU <= today && name && name !== 'undefined' && name.trim().length > 2) followupDue.push({ name, lastFU })
     }
 
     // New leads this period
@@ -143,7 +143,7 @@ export async function handler(req, res) {
       if (estValue) pipelineValue += estValue
       if (lastEdit < staleThreshold) {
         const daysStale = Math.floor((now - lastEdit) / 86400000)
-        stalledDeals.push({ name, stage, daysStale, os: osComb.join(' + ') || '—' })
+        if (name && name !== 'undefined' && name.trim().length > 2) stalledDeals.push({ name, stage, daysStale, os: osComb.join(' + ') || '—' })
       }
     }
 
@@ -191,9 +191,9 @@ export async function handler(req, res) {
     dealFunnel,
     dropped: { unqualified: droppedUnqualified },
     actions: {
-      hotLeads:    hotLeads.filter(Boolean).slice(0, 6),
+      hotLeads:    hotLeads.filter(n => n && n !== 'undefined' && n !== 'undefined — undefined' && n.trim().length > 2).slice(0, 6),
       stalledDeals: stalledDeals.slice(0, 6),
-      followupDue:  followupDue.filter(f => f.name).slice(0, 6),
+      followupDue:  followupDue.filter(f => f.name && f.name !== 'undefined' && f.name.trim().length > 2).slice(0, 6),
     },
     sourceBreakdown: sourceMap,
     monthlyTrend,

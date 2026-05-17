@@ -3,8 +3,8 @@
 // Leads DB: 340fe60097f6810091cfe204a1c13f5f
 // Deals DB:  caafe60097f683398df40197eeedbffe
 
-import { getClientByToken, getNotionToken, cacheGet, cacheSet, cacheKey } from "../../../lib/supabase.js"
-import { cacheGet as cGet, cacheSet as cSet, cacheKey as cKey } from "../../../lib/cache.js"
+import { getClientByToken, getNotionToken } from "../../../lib/supabase.js"
+import { cacheGet, cacheSet, cacheKey } from "../../../lib/cache.js"
 
 const LEADS_DB = '340fe60097f6810091cfe204a1c13f5f'
 const DEALS_DB  = 'caafe60097f683398df40197eeedbffe'
@@ -56,8 +56,8 @@ export async function handler(req, res) {
 
   const NOTION_KEY = getNotionToken(client)
 
-  const ck = cKey('opxio:sales-pipeline', client.id)
-  let cached = cGet(ck)
+  const ck = cacheKey('opxio:sales-pipeline', client.id)
+  let cached = cacheGet(ck)
 
   if (!cached || cached.stale) {
     // Fetch in background if stale, serve immediately
@@ -68,13 +68,13 @@ export async function handler(req, res) {
         queryAll(DEALS_DB,  NOTION_KEY),
       ])
       cached = { data: { leads, deals } }
-      cSet(ck, { leads, deals })
+      cacheSet(ck, { leads, deals })
     } else {
       // Stale — refresh in background
       Promise.all([
         queryAll(LEADS_DB, NOTION_KEY),
         queryAll(DEALS_DB,  NOTION_KEY),
-      ]).then(([leads, deals]) => cSet(ck, { leads, deals })).catch(console.error)
+      ]).then(([leads, deals]) => cacheSet(ck, { leads, deals })).catch(console.error)
     }
   }
 

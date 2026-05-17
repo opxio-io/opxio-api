@@ -1,7 +1,5 @@
 // handlers/clients/opxio/sales-pipeline.js
 // Opxio internal — Sales Pipeline widget
-// Leads DB: 340fe60097f6810091cfe204a1c13f5f
-// Deals DB:  caafe60097f683398df40197eeedbffe
 
 import { getClientByToken, getNotionToken } from "../../../lib/supabase.js"
 import { cacheGet, cacheSet, cacheKey } from "../../../lib/cache.js"
@@ -9,11 +7,10 @@ import { cacheGet, cacheSet, cacheKey } from "../../../lib/cache.js"
 const LEADS_DB = '340fe60097f6810091cfe204a1c13f5f'
 const DEALS_DB  = 'caafe60097f683398df40197eeedbffe'
 
-const LEAD_STAGE_ORDER = ['New Lead','Contacted','Discovery Booked','Discovery Done','Qualified','Needs Review']
-const LEAD_OPEN        = new Set(LEAD_STAGE_ORDER)
-
-const DEAL_STAGE_ORDER = ['Discovery Done','Proposal Sent','Quotation Sent','Negotiation','Closed-Won']
-const DEAL_OPEN        = new Set(['Discovery Done','Proposal Sent','Quotation Sent','Negotiation'])
+const LEAD_FUNNEL_ORDER = ['New Lead','Contacted','Discovery Booked','Discovery Done','Qualified','Needs Review']
+const LEAD_OPEN         = new Set(LEAD_FUNNEL_ORDER)
+const DEAL_STAGE_ORDER  = ['Discovery Done','Proposal Sent','Quotation Sent','Negotiation','Closed-Won']
+const DEAL_OPEN         = new Set(['Discovery Done','Proposal Sent','Quotation Sent','Negotiation'])
 
 async function queryAll(dbId, notionKey) {
   const headers = {
@@ -37,7 +34,7 @@ async function queryAll(dbId, notionKey) {
   return results
 }
 
-const getTitle  = p => (p?.title     || []).map(t => t.plain_text).join('')
+const getTitle  = p => (p?.title      || []).map(t => t.plain_text).join('').trim()
 const getStatus = p => p?.status?.name || p?.select?.name || null
 const getDate   = p => p?.date?.start  || null
 const getNumber = p => p?.number ?? null
@@ -55,90 +52,73 @@ export async function handler(req, res) {
   if (!client) return res.status(403).json({ error: 'Invalid token' })
 
   const NOTION_KEY = getNotionToken(client)
-
   const ck = cacheKey('opxio:sales-pipeline', client.id)
   let cached = cacheGet(ck)
 
-  if (!cached || cached.stale) {
-    // Fetch in background if stale, serve immediately
-    if (!cached) {
-      // Hard miss — fetch synchronously
-      const [leads, deals] = await Promise.all([
-        queryAll(LEADS_DB, NOTION_KEY),
-        queryAll(DEALS_DB,  NOTION_KEY),
-      ])
-      cached = { data: { leads, deals } }
-      cacheSet(ck, { leads, deals })
-    } else {
-      // Stale — refresh in background
-      Promise.all([
-        queryAll(LEADS_DB, NOTION_KEY),
-        queryAll(DEALS_DB,  NOTION_KEY),
-      ]).then(([leads, deals]) => cacheSet(ck, { leads, deals })).catch(console.error)
-    }
+  if (!cached) {
+    const [leads, deals] = await Promise.all([
+      queryAll(LEADS_DB, NOTION_KEY),
+      queryAll(DEALS_DB,  NOTION_KEY),
+    ])
+    cacheSet(ck, { leads, deals })
+    cached = { data: { leads, deals }, stale: false }
+  } else if (cached.stale) {
+    Promise.all([
+      queryAll(LEADS_DB, NOTION_KEY),
+      queryAll(DEALS_DB,  NOTION_KEY),
+    ]).then(([leads, deals]) => cacheSet(ck, { leads, deals })).catch(console.error)
   }
 
-  const { leads, deals } = cached.data || cached
+  const { leads, deals } = cached.data
 
   const now    = new Date()
   const today  = now.toISOString().slice(0, 10)
-  const mStart = new Date(now.getFullYear(), now.getMonth(), 1)
-  const mEnd   = new Date(now.getFullYear(), now.getMonth() + 1, 0)
   const staleThreshold = new Date(now - 7 * 24 * 60 * 60 * 1000)
 
-  // Parse month filter
+  // Month filter
   const qMonth = req.query.month !== undefined ? parseInt(req.query.month) : null
   const qYear  = req.query.year  !== undefined ? parseInt(req.query.year)  : null
-  const fStart = (qMonth !== null && qYear !== null)
-    ? new Date(qYear, qMonth, 1)
-    : mStart
-  const fEnd   = (qMonth !== null && qYear !== null)
-    ? new Date(qYear, qMonth + 1, 0)
-    : mEnd
+  const fStart = (qMonth !== null && qYear !== null) ? new Date(qYear, qMonth, 1)     : new Date(now.getFullYear(), now.getMonth(), 1)
+  const fEnd   = (qMonth !== null && qYear !== null) ? new Date(qYear, qMonth + 1, 0) : new Date(now.getFullYear(), now.getMonth() + 1, 0)
 
   // ── Lead metrics ──────────────────────────────────────────────────────────
-  let openLeads = 0, hotLeads = 0, convertedMTD = 0
-  const leadsByStage  = {}
-  const sourceCount   = {}
-  const hotLeadNames  = []
-  const followupLeads = []
+  let openLeads = 0, newLeadsMTD = 0, convertedTotal = 0
+  const leadsByStage = {}
+  const sourceMap    = {}   // { name: { leads, closed } }
+  const hotLeads     = []
+  const followupDue  = []
 
   for (const page of leads) {
-    const p     = page.properties
-    const stage = getStatus(p['Stage'])
-    const qual  = getStatus(p['Qualification Score'])
-    const name  = getTitle(p['Lead Name'])
-    const created = page.created_time
+    const p       = page.properties
+    const stage   = getStatus(p['Stage'])
+    const qual    = getStatus(p['Qualification Score'])
+    const name    = getTitle(p['Lead Name']) || '(Unnamed)'
+    const created = new Date(page.created_time)
     const lastFU  = getDate(p['Last Follow-Up'])
     const sources = getMulti(p['Source'])
 
     if (!stage) continue
 
-    // Funnel counts (all stages)
+    // Stage funnel counts
     leadsByStage[stage] = (leadsByStage[stage] || 0) + 1
 
-    // Source breakdown (open leads only)
-    if (LEAD_OPEN.has(stage)) {
-      openLeads++
-      if (qual === 'Hot') {
-        hotLeads++
-        hotLeadNames.push(name)
-      }
-      // Follow-up overdue
-      if (lastFU && lastFU <= today) {
-        followupLeads.push({ name, lastFU })
-      }
-      // Source
-      for (const src of sources) {
-        sourceCount[src] = (sourceCount[src] || 0) + 1
-      }
+    // Source breakdown — all leads
+    for (const src of sources) {
+      if (!sourceMap[src]) sourceMap[src] = { leads: 0, closed: 0 }
+      sourceMap[src].leads++
+      if (stage === 'Converted') sourceMap[src].closed++
     }
 
-    // Converted this month
-    if (stage === 'Converted' && created) {
-      const d = new Date(created)
-      if (d >= fStart && d <= fEnd) convertedMTD++
+    // Open leads
+    if (LEAD_OPEN.has(stage)) {
+      openLeads++
+      if (qual === 'Hot') hotLeads.push(name)
+      if (lastFU && lastFU <= today) followupDue.push({ name, lastFU })
     }
+
+    // New leads this period
+    if (created >= fStart && created <= fEnd) newLeadsMTD++
+    if (stage === 'Converted') convertedTotal++
   }
 
   // ── Deal metrics ──────────────────────────────────────────────────────────
@@ -149,22 +129,20 @@ export async function handler(req, res) {
   for (const page of deals) {
     const p         = page.properties
     const stage     = getStatus(p['Stage'])
-    const name      = getTitle(p['Deal Name'])
+    const name      = getTitle(p['Deal Name']) || '(Unnamed)'
     const estValue  = getNumber(p['Estimated Value'])
     const closeDate = getDate(p['Actual Close Date'])
     const lastEdit  = new Date(page.last_edited_time)
     const osComb    = getMulti(p['OS Combination'])
 
     if (!stage) continue
-
     dealsByStage[stage] = (dealsByStage[stage] || 0) + 1
 
     if (DEAL_OPEN.has(stage)) {
       openDeals++
       if (estValue) pipelineValue += estValue
-      // Stalled: last edited > 7 days ago
       if (lastEdit < staleThreshold) {
-        const daysStale = Math.floor((now - lastEdit) / (24 * 60 * 60 * 1000))
+        const daysStale = Math.floor((now - lastEdit) / 86400000)
         stalledDeals.push({ name, stage, daysStale, os: osComb.join(' + ') || '—' })
       }
     }
@@ -175,36 +153,51 @@ export async function handler(req, res) {
     }
   }
 
-  // Build ordered funnels
-  const leadFunnel = LEAD_STAGE_ORDER.map(s => ({ stage: s, count: leadsByStage[s] || 0 }))
-  const dealFunnel = DEAL_STAGE_ORDER.map(s => ({ stage: s, count: dealsByStage[s] || 0 }))
+  // ── Monthly trend (last 12 months) ───────────────────────────────────────
+  const monthlyTrend = []
+  for (let i = 11; i >= 0; i--) {
+    const d  = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    const mS = new Date(d.getFullYear(), d.getMonth(), 1)
+    const mE = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59)
+    const count = leads.filter(p => {
+      const c = new Date(p.created_time)
+      return c >= mS && c <= mE
+    }).length
+    monthlyTrend.push({
+      label: d.toLocaleString('default', { month: 'short' }),
+      count,
+    })
+  }
 
-  // Conversion rate: converted / (converted + unqualified + open)
-  const totalLeads = leads.length
-  const convRate   = totalLeads > 0
-    ? Math.round(((leadsByStage['Converted'] || 0) / totalLeads) * 100)
-    : null
-
+  const convRate = leads.length > 0 ? Math.round((convertedTotal / leads.length) * 100) : 0
   stalledDeals.sort((a, b) => b.daysStale - a.daysStale)
+
+  const leadFunnel = LEAD_FUNNEL_ORDER.map(s => ({ stage: s, count: leadsByStage[s] || 0 }))
+  const dealFunnel = DEAL_STAGE_ORDER.map(s  => ({ stage: s, count: dealsByStage[s]  || 0 }))
+
+  // Dropped this period
+  const droppedUnqualified = leadsByStage['Unqualified'] || 0
 
   return res.status(200).json({
     kpi: {
+      newLeadsMTD,
       openLeads,
       openDeals,
       pipelineValue: Math.round(pipelineValue),
       closedWonMTD,
-      hotLeads,
       convRate,
     },
     leadFunnel,
     dealFunnel,
+    dropped: { unqualified: droppedUnqualified },
     actions: {
-      hotLeads: hotLeadNames.slice(0, 5),
-      stalledDeals: stalledDeals.slice(0, 5),
-      followupLeads: followupLeads.slice(0, 5),
+      hotLeads:    hotLeads.filter(Boolean).slice(0, 6),
+      stalledDeals: stalledDeals.slice(0, 6),
+      followupDue:  followupDue.filter(f => f.name).slice(0, 6),
     },
-    sourceBreakdown: sourceCount,
-    totals: { leads: totalLeads, deals: deals.length },
+    sourceBreakdown: sourceMap,
+    monthlyTrend,
+    totals: { leads: leads.length, deals: deals.length },
     updatedAt: now.toISOString(),
   })
 }

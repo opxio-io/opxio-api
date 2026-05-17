@@ -7,8 +7,8 @@ import { cacheGet, cacheSet, cacheKey } from "../../../lib/cache.js"
 const LEADS_DB = '340fe60097f6810091cfe204a1c13f5f'
 const DEALS_DB  = 'caafe60097f683398df40197eeedbffe'
 
-const LEAD_FUNNEL_ORDER = ['New Lead','Contacted','Discovery Booked','Discovery Done','Qualified','Needs Review']
-const LEAD_OPEN         = new Set(LEAD_FUNNEL_ORDER)
+const LEAD_FUNNEL_ORDER = ['New Lead','Contacted','Discovery Booked','Discovery Done','Qualified','Needs Review','Converted']
+const LEAD_OPEN         = new Set(['New Lead','Contacted','Discovery Booked','Discovery Done','Qualified','Needs Review'])
 const DEAL_STAGE_ORDER  = ['Discovery Done','Proposal Sent','Quotation Sent','Negotiation','Closed-Won']
 const DEAL_OPEN         = new Set(['Discovery Done','Proposal Sent','Quotation Sent','Negotiation'])
 

@@ -86,11 +86,12 @@ function computeStats({ items, entityMap, mStart, mEnd, now, dateField, approved
 
     if (OPEN.has(status)) {
       pendingCount++
-      const daysSent        = status === 'Sent' ? daysDiff(issueDate, now) : null
-      const needsFollowUp   = status === 'Sent' && daysSent !== null && daysSent >= 7
+      const daysOpen        = daysDiff(issueDate, now)
+      const daysSent        = status === 'Sent' ? daysOpen : null
+      const needsFollowUp   = status === 'Sent' && daysOpen !== null && daysOpen >= 7
       const daysUntilExpiry = validUntil ? Math.floor((new Date(validUntil) - now) / 86400000) : null
       const expiringSoon    = daysUntilExpiry !== null && daysUntilExpiry >= 0 && daysUntilExpiry <= 3
-      activeItems.push({ refNo, entity, amount, currency, status, quoteType: quoteType || '—', daysSent, needsFollowUp, expiringSoon })
+      activeItems.push({ refNo, entity, amount, currency, status, quoteType: quoteType || '—', daysOpen, daysSent, needsFollowUp, expiringSoon })
     }
   }
 

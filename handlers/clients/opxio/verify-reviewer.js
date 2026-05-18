@@ -2,14 +2,12 @@
 // POST /api/opxio/verify-reviewer?token=<widget_token>
 // Body: { email }
 //
-// 1. Validates widget token
-// 2. Lists all Notion workspace members via /v1/users — confirms email
-//    belongs to a real workspace member (not just any string)
-// 3. Queries Team & Staff Directory DB for a record where:
-//    Email = input email  AND  QC Reviewer = true
-// 4. If found → issues a signed session token (8h TTL)
+// Validates widget token, then queries Team Directory for a record where:
+//   Email = input email  AND  QC Reviewer = true
 //
-// To grant reviewer access: open Team & Staff Directory in Notion,
+// If found → issues a signed session token (8h TTL).
+//
+// To grant reviewer access: open Team Directory in Notion,
 // find the team member, tick the "QC Reviewer" checkbox.
 //
 // Required env vars: NOTION_API_KEY, JWT_SECRET
@@ -27,26 +25,7 @@ function hdrs(key) {
   }
 }
 
-// Confirm email is a real workspace member via /v1/users
-async function isWorkspaceMember(email, notionKey) {
-  let hasMore = true, cursor
-  while (hasMore) {
-    const url = cursor
-      ? `https://api.notion.com/v1/users?page_size=100&start_cursor=${cursor}`
-      : 'https://api.notion.com/v1/users?page_size=100'
-    const r = await fetch(url, { headers: hdrs(notionKey) })
-    if (!r.ok) throw new Error(`Failed to list workspace users: ${await r.text()}`)
-    const d = await r.json()
-    for (const u of d.results || []) {
-      if (u?.person?.email?.toLowerCase() === email) return true
-    }
-    hasMore = d.has_more
-    cursor  = d.next_cursor
-  }
-  return false
-}
-
-// Query Team DB for a record with matching email AND QC Reviewer = true
+// Query Team Directory for a record with matching email AND QC Reviewer = true
 async function isApprovedReviewer(email, notionKey) {
   const r = await fetch(`https://api.notion.com/v1/databases/${TEAM_DB}/query`, {
     method: 'POST',
@@ -54,14 +33,14 @@ async function isApprovedReviewer(email, notionKey) {
     body: JSON.stringify({
       filter: {
         and: [
-          { property: 'Email',       email:    { equals: email } },
-          { property: 'QC Reviewer', checkbox: { equals: true  } },
+          { property: 'Email', rich_text: { contains: email } },
+          { property: 'QC Reviewer', checkbox: { equals: true } },
         ],
       },
       page_size: 1,
     }),
   })
-  if (!r.ok) throw new Error(`Team DB query failed: ${await r.text()}`)
+  if (!r.ok) throw new Error(`Team Directory query failed: ${await r.text()}`)
   const d = await r.json()
   return (d.results?.length || 0) > 0
 }
@@ -86,23 +65,13 @@ export async function handler(req, res) {
   const notionKey  = getNotionToken(client)
 
   try {
-    // 1. Must be a real workspace member
-    const member = await isWorkspaceMember(normalised, notionKey)
-    if (!member) {
-      return res.status(403).json({
-        error: 'This email is not a member of the connected Notion workspace.',
-      })
-    }
-
-    // 2. Must have QC Reviewer ticked in Team Directory
     const approved = await isApprovedReviewer(normalised, notionKey)
     if (!approved) {
       return res.status(403).json({
-        error: 'You are not listed as a QC Reviewer. Ask your workspace admin to enable access in the Team Directory.',
+        error: 'Not authorised. Ask your workspace admin to enable QC Reviewer access in the Team Directory.',
       })
     }
 
-    // 3. Issue session
     const session = signSession(normalised, client.id)
     return res.status(200).json({ ok: true, session, email: normalised })
 

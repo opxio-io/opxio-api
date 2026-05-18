@@ -2,7 +2,7 @@
 // Opxio internal — Sales Pipeline widget
 
 import { getClientByToken, getNotionToken } from "../../../lib/supabase.js"
-import { cacheGet, cacheSet, cacheKey } from "../../../lib/cache.js"
+import { cacheGet, cacheSet, cacheKey, cacheDelete } from "../../../lib/cache.js"
 
 const LEADS_DB = '340fe60097f6810091cfe204a1c13f5f'
 const DEALS_DB  = 'caafe60097f683398df40197eeedbffe'
@@ -53,6 +53,7 @@ export async function handler(req, res) {
 
   const NOTION_KEY = getNotionToken(client)
   const ck = cacheKey('opxio:sales-pipeline', client.id)
+  if (req.query.refresh === '1') cacheDelete(ck)
   let cached = cacheGet(ck)
 
   if (!cached) {

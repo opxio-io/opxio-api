@@ -1,9 +1,30 @@
-import { queryAll } from '../../../lib/notion.js'
+import { getClientByToken, getNotionToken } from '../../../lib/supabase.js'
 import { cacheGet, cacheSet, cacheKey, cacheDelete } from '../../../lib/cache.js'
-import { getClientByToken } from '../../../lib/supabase.js'
 
 const QUOTES_DB   = 'b54fe60097f683e1930d012d635b14d5'
-const ENTITIES_DB = 'fcdfe60097f68306b6a3876bc4f785ca'
+const ENTITIES_DB = 'fcdfe60097f682c09be901fe6ebb6b41'
+
+async function queryAll(dbId, notionKey) {
+  const headers = {
+    'Authorization': `Bearer ${notionKey}`,
+    'Notion-Version': '2022-06-28',
+    'Content-Type': 'application/json',
+  }
+  let results = [], hasMore = true, cursor
+  while (hasMore) {
+    const body = { page_size: 100 }
+    if (cursor) body.start_cursor = cursor
+    const r = await fetch(`https://api.notion.com/v1/databases/${dbId}/query`, {
+      method: 'POST', headers, body: JSON.stringify(body)
+    })
+    if (!r.ok) throw new Error(await r.text())
+    const d = await r.json()
+    results = results.concat(d.results)
+    hasMore = d.has_more
+    cursor  = d.next_cursor
+  }
+  return results
+}
 
 const getStatus  = p => p?.status?.name  || p?.select?.name  || null
 const getNum     = p => typeof p?.number === 'number' ? p.number : null
@@ -30,16 +51,16 @@ function computeStats({ quotes, entityMap, mStart, mEnd, now }) {
   const activeQuotes = []
 
   for (const q of quotes) {
-    const p         = q.properties
-    const status    = getStatus(p.Status)
-    const amount    = getNum(p.Amount)    || 0
-    const issueDate = getDate(p['Issue Date'])
+    const p          = q.properties
+    const status     = getStatus(p.Status)
+    const amount     = getNum(p.Amount)    || 0
+    const issueDate  = getDate(p['Issue Date'])
     const validUntil = getDate(p['Valid Until'])
-    const quoteType = getSelect(p['Quote Type'])
-    const currency  = getSelect(p.Currency) || 'MYR'
-    const quoteNo   = getTitleStr(p) || '—'
-    const entityIds = getRelIds(p.Entity)
-    const entity    = entityIds.length ? (entityMap[entityIds[0]] || '—') : '—'
+    const quoteType  = getSelect(p['Quote Type'])
+    const currency   = getSelect(p.Currency) || 'MYR'
+    const quoteNo    = getTitleStr(p) || '—'
+    const entityIds  = getRelIds(p.Entity)
+    const entity     = entityIds.length ? (entityMap[entityIds[0]] || '—') : '—'
 
     if (!status) continue
 
@@ -66,8 +87,7 @@ function computeStats({ quotes, entityMap, mStart, mEnd, now }) {
       const daysSent        = status === 'Sent' ? daysDiff(issueDate, now) : null
       const daysUntilExpiry = validUntil ? -daysDiff(validUntil, now) : null
       activeQuotes.push({
-        id: q.id,
-        quoteNo, entity, amount, currency, status,
+        id: q.id, quoteNo, entity, amount, currency, status,
         quoteType: quoteType || '—',
         issueDate, validUntil, daysSent, daysUntilExpiry,
         needsFollowUp: status === 'Sent' && daysSent !== null && daysSent >= 7,
@@ -82,8 +102,8 @@ function computeStats({ quotes, entityMap, mStart, mEnd, now }) {
     return af !== bf ? af - bf : (a.issueDate || '').localeCompare(b.issueDate || '')
   })
 
-  const openValue  = (funnelV['Draft'] || 0) + (funnelV['Ready to Send'] || 0) + (funnelV['Sent'] || 0)
-  const convRate   = decidedAll > 0 ? Math.round((approvedAll / decidedAll) * 100) : null
+  const openValue = (funnelV['Draft'] || 0) + (funnelV['Ready to Send'] || 0) + (funnelV['Sent'] || 0)
+  const convRate  = decidedAll > 0 ? Math.round((approvedAll / decidedAll) * 100) : null
 
   return {
     kpi: { issuedMTD, quotedValueMTD, pendingCount, approvedMTD, convRate, openValue },
@@ -95,15 +115,15 @@ function computeStats({ quotes, entityMap, mStart, mEnd, now }) {
 
 export async function handler(req, res) {
   try {
-    const { token, month, year } = req.query
+    const token = req.query.token || req.headers['x-widget-token']
     if (!token) return res.status(401).json({ error: 'Missing token' })
     const client = await getClientByToken(token)
     if (!client) return res.status(403).json({ error: 'Invalid token' })
 
-    const NOTION_KEY = client.notion_token || process.env.NOTION_API_KEY
+    const NOTION_KEY = getNotionToken(client)
     const now    = new Date()
-    const m      = month != null ? parseInt(month) : now.getMonth()
-    const y      = year  != null ? parseInt(year)  : now.getFullYear()
+    const m      = req.query.month != null ? parseInt(req.query.month) : now.getMonth()
+    const y      = req.query.year  != null ? parseInt(req.query.year)  : now.getFullYear()
     const mStart = new Date(y, m, 1)
     const mEnd   = new Date(y, m + 1, 0, 23, 59, 59)
 

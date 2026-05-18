@@ -149,9 +149,12 @@ async function handlePost(req, res, reviewerEmail) {
     'Reviewer Notes': { rich_text:  [{ text: { content: notes } }] },
   }, NOTION_KEY())
 
-  // Patch source doc
+  // Patch source doc (status + QC Status)
+  const qcStatusPatch = { 'QC Status': { select: { name: qcStatus } } }
   if (sourceStatusPatch) {
-    await patchPage(sourceId, sourceStatusPatch, NOTION_KEY())
+    await patchPage(sourceId, { ...sourceStatusPatch, ...qcStatusPatch }, NOTION_KEY())
+  } else {
+    await patchPage(sourceId, qcStatusPatch, NOTION_KEY())
   }
 
   // Add comment on source

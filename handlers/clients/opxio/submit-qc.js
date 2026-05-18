@@ -128,6 +128,11 @@ export async function handler(req, res) {
 
     const qcPage = await createPage(qcBody, NOTION_KEY())
 
+    // 3b. Set QC Status on source page
+    try {
+      await patchPage(page_id, { 'QC Status': { select: { name: 'Pending Review' } } }, NOTION_KEY())
+    } catch (_) { /* non-fatal */ }
+
     // 4. Add Notion comment on source page
     try {
       await fetch('https://api.notion.com/v1/comments', {

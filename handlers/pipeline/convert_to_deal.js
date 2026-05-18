@@ -147,7 +147,7 @@ async function run(payload) {
   if (leadOwner.length > 0)         dealProps["Deal Owner"]       = { people: leadOwner }
   if (situation)                    dealProps["Situation"]       = { rich_text: [{ text: { content: situation } }] }
   if (discoveryCall)                dealProps["Discovery Call"]  = { date: { start: discoveryCall } }
-  if (potentialVal)                 dealProps["Deal Value"]      = { number: potentialVal }
+  if (potentialVal)                 dealProps["Estimated Value"]  = { number: potentialVal }
   if (notes)                        dealProps["Notes"]           = { rich_text: [{ text: { content: notes } }] }
   if (dealSourceName)               dealProps["Source"]          = { select: { name: dealSourceName } }
   if (catalogueOsIds.length > 0)   dealProps["OS Type"]         = { relation: catalogueOsIds }

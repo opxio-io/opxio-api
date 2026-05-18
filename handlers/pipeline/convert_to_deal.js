@@ -80,7 +80,7 @@ async function run(payload) {
   const lead  = await getPage(leadId, token)
   const lp    = lead.properties
 
-  const companyRel = lp.Company?.relation?.[0]?.id?.replace(/-/g, "") || null
+  const companyRel = lp["Entity"]?.relation?.[0]?.id?.replace(/-/g, "") || null
 
   const contactRel = (
     lp["Primary Contact"]?.relation ||
@@ -108,6 +108,7 @@ async function run(payload) {
 
   const leadSourceArr  = lp.Source?.multi_select || []
   const dealSourceName = mapLeadSourceToDeal(leadSourceArr)
+  const leadOwner      = (lp["Lead Owner"]?.people || []).map(u => ({ id: u.id }))
 
   // Map all OS interests to Catalogue relation IDs
   const catalogueOsIds = osInterestAll
@@ -137,12 +138,13 @@ async function run(payload) {
   // ── 4. Create Deal ────────────────────────────────────────────────────────
   const dealProps = {
     "Deal Name":   { title: [{ text: { content: dealName } }] },
-    "Stage":       { status: { name: "Scoping" } },
+    "Stage":       { status: { name: "Discovery Done" } },
     "Origin Lead": { relation: [{ id: leadId }] },
   }
 
-  if (companyRel)                   dealProps["Company"]         = { relation: [{ id: companyRel }] }
+  if (companyRel)                   dealProps["Entity"]          = { relation: [{ id: companyRel }] }
   if (contactRel)                   dealProps["Primary Contact"] = { relation: [{ id: contactRel }] }
+  if (leadOwner.length > 0)         dealProps["Deal Owner"]       = { people: leadOwner }
   if (situation)                    dealProps["Situation"]       = { rich_text: [{ text: { content: situation } }] }
   if (discoveryCall)                dealProps["Discovery Call"]  = { date: { start: discoveryCall } }
   if (potentialVal)                 dealProps["Deal Value"]      = { number: potentialVal }
@@ -202,9 +204,9 @@ async function run(payload) {
       contactProps["Primary Contact"] = { checkbox: true }
 
       // Set Company relation if missing
-      const existingCompany = contactPage.properties?.Company?.relation?.[0]?.id
+      const existingCompany = contactPage.properties?.Entity?.relation?.[0]?.id
       if (!existingCompany && companyRel) {
-        contactProps["Company"] = { relation: [{ id: companyRel }] }
+        contactProps["Entity"]  = { relation: [{ id: companyRel }] }
       }
 
       await patchPage(contactRel, contactProps, token)

@@ -17,7 +17,7 @@
 import { getClientByToken, getNotionToken } from '../../../lib/supabase.js'
 import { signSession }                      from '../../../lib/session.js'
 
-const TEAM_DB = '33ffe60097f68160a05cf07440ceaa06'
+const TEAM_DB = '345fe60097f68105b7bfc34e6a298e87'
 
 function hdrs(key) {
   return {

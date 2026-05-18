@@ -1,8 +1,9 @@
 import { getClientByToken, getNotionToken } from '../../../lib/supabase.js'
-import { cacheGet, cacheSet, cacheKey, cacheDelete } from '../../../lib/cache.js'
+import { cacheGet, cacheSet, cacheKey } from '../../../lib/cache.js'
 
-const QUOTES_DB   = 'b54fe60097f683e1930d012d635b14d5'
-const ENTITIES_DB = 'fcdfe60097f682c09be901fe6ebb6b41'
+const QUOTES_DB    = 'b54fe60097f683e1930d012d635b14d5'
+const PROPOSALS_DB = '1ad661f2679047749d16d2767291a30f'
+const ENTITIES_DB  = 'fcdfe60097f68306b6a3876bc4f785ca'
 
 async function queryAll(dbId, notionKey) {
   const headers = {
@@ -36,29 +37,31 @@ const getTitleStr = props => {
   return (tp?.title || []).map(t => t.plain_text).join('').trim()
 }
 
-const FUNNEL_ORDER  = ['Draft', 'Ready to Send', 'Sent', 'Approved', 'Declined', 'Expired']
-const OPEN_STATUSES = new Set(['Draft', 'Ready to Send', 'Sent'])
-
 function daysDiff(dateStr, ref) {
   if (!dateStr) return null
   return Math.floor((ref - new Date(dateStr)) / 86400000)
 }
 
-function computeStats({ quotes, entityMap, mStart, mEnd, now }) {
-  let issuedMTD = 0, quotedValueMTD = 0, approvedMTD = 0, pendingCount = 0
+// Works for both quotes (dateField='Issue Date', approvedStatus='Approved')
+// and proposals (dateField='Date', approvedStatus='Accepted')
+function computeStats({ items, entityMap, mStart, mEnd, now, dateField, approvedStatus }) {
+  const OPEN = new Set(['Draft', 'Ready to Send', 'Sent'])
+  const funnelOrder = ['Draft', 'Ready to Send', 'Sent', approvedStatus, 'Declined', 'Expired']
+
+  let issuedMTD = 0, valueMTD = 0, approvedMTD = 0, pendingCount = 0
   let approvedAll = 0, decidedAll = 0
   const funnelC = {}, funnelV = {}, typeCounts = {}
-  const activeQuotes = []
+  const activeItems = []
 
-  for (const q of quotes) {
+  for (const q of items) {
     const p          = q.properties
     const status     = getStatus(p.Status)
     const amount     = getNum(p.Amount)    || 0
-    const issueDate  = getDate(p['Issue Date'])
+    const issueDate  = getDate(p[dateField])
     const validUntil = getDate(p['Valid Until'])
     const quoteType  = getSelect(p['Quote Type'])
     const currency   = getSelect(p.Currency) || 'MYR'
-    const quoteNo    = getTitleStr(p) || '—'
+    const refNo      = getTitleStr(p) || '—'
     const entityIds  = getRelIds(p.Entity)
     const entity     = entityIds.length ? (entityMap[entityIds[0]] || '—') : '—'
 
@@ -67,82 +70,69 @@ function computeStats({ quotes, entityMap, mStart, mEnd, now }) {
     funnelC[status] = (funnelC[status] || 0) + 1
     funnelV[status] = (funnelV[status] || 0) + amount
 
-    if (OPEN_STATUSES.has(status) && quoteType)
+    if (OPEN.has(status) && quoteType)
       typeCounts[quoteType] = (typeCounts[quoteType] || 0) + 1
 
-    if (status === 'Approved') { approvedAll++; decidedAll++ }
-    if (status === 'Declined') decidedAll++
+    if (status === approvedStatus) { approvedAll++; decidedAll++ }
+    if (status === 'Declined')       decidedAll++
 
     const issued  = issueDate ? new Date(issueDate) : null
     const inMonth = issued && issued >= mStart && issued <= mEnd
     if (inMonth) {
       issuedMTD++
-      quotedValueMTD += amount
-      if (status === 'Approved') approvedMTD++
+      valueMTD += amount
+      if (status === approvedStatus) approvedMTD++
     }
 
-    if (status === 'Sent') pendingCount++
-
-    if (OPEN_STATUSES.has(status)) {
+    if (OPEN.has(status)) {
+      pendingCount++
       const daysSent        = status === 'Sent' ? daysDiff(issueDate, now) : null
-      const daysUntilExpiry = validUntil ? -daysDiff(validUntil, now) : null
-      activeQuotes.push({
-        id: q.id, quoteNo, entity, amount, currency, status,
-        quoteType: quoteType || '—',
-        issueDate, validUntil, daysSent, daysUntilExpiry,
-        needsFollowUp: status === 'Sent' && daysSent !== null && daysSent >= 7,
-        expiringSoon:  daysUntilExpiry !== null && daysUntilExpiry <= 3 && daysUntilExpiry >= 0
-      })
+      const needsFollowUp   = status === 'Sent' && daysSent !== null && daysSent >= 7
+      const daysUntilExpiry = validUntil ? Math.floor((new Date(validUntil) - now) / 86400000) : null
+      const expiringSoon    = daysUntilExpiry !== null && daysUntilExpiry >= 0 && daysUntilExpiry <= 3
+      activeItems.push({ refNo, entity, amount, currency, status, quoteType: quoteType || '—', daysSent, needsFollowUp, expiringSoon })
     }
   }
 
-  activeQuotes.sort((a, b) => {
-    const af = (a.needsFollowUp || a.expiringSoon) ? 0 : 1
-    const bf = (b.needsFollowUp || b.expiringSoon) ? 0 : 1
-    return af !== bf ? af - bf : (a.issueDate || '').localeCompare(b.issueDate || '')
-  })
+  const openValue  = (funnelV['Draft'] || 0) + (funnelV['Ready to Send'] || 0) + (funnelV['Sent'] || 0)
+  const convRate   = decidedAll > 0 ? Math.round((approvedAll / decidedAll) * 100) : null
+  const funnel     = funnelOrder.map(s => ({ status: s, count: funnelC[s] || 0, value: funnelV[s] || 0 }))
 
-  const openValue = (funnelV['Draft'] || 0) + (funnelV['Ready to Send'] || 0) + (funnelV['Sent'] || 0)
-  const convRate  = decidedAll > 0 ? Math.round((approvedAll / decidedAll) * 100) : null
+  activeItems.sort((a, b) => (b.needsFollowUp ? 1 : 0) - (a.needsFollowUp ? 1 : 0))
 
   return {
-    kpi: { issuedMTD, quotedValueMTD, pendingCount, approvedMTD, convRate, openValue },
-    funnel: FUNNEL_ORDER.map(s => ({ status: s, count: funnelC[s] || 0, value: funnelV[s] || 0 })),
-    activeQuotes,
-    typeBreakdown: typeCounts
+    kpi: { issuedMTD, valueMTD, pendingCount, approvedMTD, convRate, openValue },
+    funnel,
+    activeItems,
+    typeBreakdown: typeCounts,
   }
 }
 
 async function fetchAndCache(ck, NOTION_KEY) {
-  const [quotes, entities] = await Promise.all([
-    queryAll(QUOTES_DB, NOTION_KEY),
-    queryAll(ENTITIES_DB, NOTION_KEY).catch(() => [])
+  const [quotes, proposals, entities] = await Promise.all([
+    queryAll(QUOTES_DB,    NOTION_KEY),
+    queryAll(PROPOSALS_DB, NOTION_KEY),
+    queryAll(ENTITIES_DB,  NOTION_KEY).catch(() => []),
   ])
   const entityMap = {}
   for (const e of entities) {
     const name = getTitleStr(e.properties)
     if (name) entityMap[e.id] = name
   }
-  cacheSet(ck, { quotes, entityMap })
-  return { data: { quotes, entityMap }, stale: false }
+  cacheSet(ck, { quotes, proposals, entityMap })
+  return { data: { quotes, proposals, entityMap }, stale: false }
 }
 
 export async function handler(req, res) {
   try {
-    const token = req.query.token || req.headers['x-widget-token']
+    const token = req.query.token || req.body?.token
     if (!token) return res.status(401).json({ error: 'Missing token' })
+
     const client = await getClientByToken(token)
     if (!client) return res.status(403).json({ error: 'Invalid token' })
 
     const NOTION_KEY = getNotionToken(client)
-    const now    = new Date()
-    const m      = req.query.month != null ? parseInt(req.query.month) : now.getMonth()
-    const y      = req.query.year  != null ? parseInt(req.query.year)  : now.getFullYear()
-    const mStart = new Date(y, m, 1)
-    const mEnd   = new Date(y, m + 1, 0, 23, 59, 59)
-
     const ck = cacheKey('opxio:quotes-pipeline', client.id)
-    if (req.query.refresh === '1') cacheDelete(ck)
 
     let cached = cacheGet(ck)
     if (!cached) {
@@ -151,10 +141,40 @@ export async function handler(req, res) {
       fetchAndCache(ck, NOTION_KEY).catch(console.error)
     }
 
-    const { quotes, entityMap } = cached.data
-    res.json(computeStats({ quotes, entityMap, mStart, mEnd, now }))
+    const { quotes, proposals, entityMap } = cached.data
+
+    const now    = new Date()
+    const reqY   = parseInt(req.query.year)  || now.getFullYear()
+    const reqM   = parseInt(req.query.month)
+    const month  = isNaN(reqM) ? now.getMonth() : reqM
+    const mStart = new Date(reqY, month, 1)
+    const mEnd   = new Date(reqY, month + 1, 0, 23, 59, 59)
+
+    const qStats = computeStats({ items: quotes,    entityMap, mStart, mEnd, now, dateField: 'Issue Date', approvedStatus: 'Approved' })
+    const pStats = computeStats({ items: proposals, entityMap, mStart, mEnd, now, dateField: 'Date',       approvedStatus: 'Accepted' })
+
+    res.json({
+      // KPI row — quotes-focused (revenue)
+      kpi: {
+        ...qStats.kpi,
+        proposalsSentMTD:   pStats.kpi.issuedMTD,
+        proposalsAccepted:  pStats.kpi.approvedMTD,
+        proposalConvRate:   pStats.kpi.convRate,
+        proposalOpenValue:  pStats.kpi.openValue,
+      },
+      // Quotes tab
+      quoteFunnel:        qStats.funnel,
+      quoteActiveItems:   qStats.activeItems,
+      quoteTypeBreakdown: qStats.typeBreakdown,
+      quoteConvRate:      qStats.kpi.convRate,
+      // Proposals tab
+      proposalFunnel:        pStats.funnel,
+      proposalActiveItems:   pStats.activeItems,
+      proposalTypeBreakdown: pStats.typeBreakdown,
+      proposalConvRate:      pStats.kpi.convRate,
+    })
   } catch (err) {
-    console.error('[quotes-pipeline]', err)
+    console.error('quotes-pipeline error:', err)
     res.status(500).json({ error: err.message })
   }
 }

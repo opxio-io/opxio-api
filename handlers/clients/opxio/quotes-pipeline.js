@@ -26,11 +26,11 @@ async function queryAll(dbId, notionKey) {
   return results
 }
 
-const getStatus  = p => p?.status?.name  || p?.select?.name  || null
-const getNum     = p => typeof p?.number === 'number' ? p.number : null
-const getDate    = p => p?.date?.start   || null
-const getSelect  = p => p?.select?.name  || null
-const getRelIds  = p => (p?.relation     || []).map(r => r.id)
+const getStatus   = p => p?.status?.name  || p?.select?.name  || null
+const getNum      = p => typeof p?.number === 'number' ? p.number : null
+const getDate     = p => p?.date?.start   || null
+const getSelect   = p => p?.select?.name  || null
+const getRelIds   = p => (p?.relation     || []).map(r => r.id)
 const getTitleStr = props => {
   const tp = Object.values(props || {}).find(v => v.type === 'title')
   return (tp?.title || []).map(t => t.plain_text).join('').trim()
@@ -113,6 +113,20 @@ function computeStats({ quotes, entityMap, mStart, mEnd, now }) {
   }
 }
 
+async function fetchAndCache(ck, NOTION_KEY) {
+  const [quotes, entities] = await Promise.all([
+    queryAll(QUOTES_DB, NOTION_KEY),
+    queryAll(ENTITIES_DB, NOTION_KEY).catch(() => [])
+  ])
+  const entityMap = {}
+  for (const e of entities) {
+    const name = getTitleStr(e.properties)
+    if (name) entityMap[e.id] = name
+  }
+  cacheSet(ck, { quotes, entityMap })
+  return { data: { quotes, entityMap }, stale: false }
+}
+
 export async function handler(req, res) {
   try {
     const token = req.query.token || req.headers['x-widget-token']
@@ -132,20 +146,13 @@ export async function handler(req, res) {
 
     let cached = cacheGet(ck)
     if (!cached) {
-      const [quotes, entities] = await Promise.all([
-        queryAll(QUOTES_DB, NOTION_KEY),
-        queryAll(ENTITIES_DB, NOTION_KEY).catch(() => [])
-      ])
-      const entityMap = {}
-      for (const e of entities) {
-        const name = getTitleStr(e.properties)
-        if (name) entityMap[e.id] = name
-      }
-      cached = { quotes, entityMap }
-      cacheSet(ck, cached)
+      cached = await fetchAndCache(ck, NOTION_KEY)
+    } else if (cached.stale) {
+      fetchAndCache(ck, NOTION_KEY).catch(console.error)
     }
 
-    res.json(computeStats({ ...cached, mStart, mEnd, now }))
+    const { quotes, entityMap } = cached.data
+    res.json(computeStats({ quotes, entityMap, mStart, mEnd, now }))
   } catch (err) {
     console.error('[quotes-pipeline]', err)
     res.status(500).json({ error: err.message })

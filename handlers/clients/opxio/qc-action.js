@@ -125,8 +125,8 @@ export async function handler(req, res) {
       'Reviewed By':   { rich_text: [{ text: { content: reviewerEmail } }] },
     }, KEY())
 
-    // Patch source doc: status + QC Status
-    const qcStatusPatch = { 'QC Status': { select: { name: qcStatus } } }
+    // Patch source doc: status + Review Status
+    const qcStatusPatch = { 'Review Status': { select: { name: qcStatus } } }
     await patchPage(sourceId, sourceStatusPatch
       ? { ...sourceStatusPatch, ...qcStatusPatch }
       : qcStatusPatch

@@ -99,17 +99,21 @@ export async function handler(req, res) {
 
     if (!stage) continue
 
-    // Stage funnel counts
-    leadsByStage[stage] = (leadsByStage[stage] || 0) + 1
+    const inPeriod = created >= fStart && created <= fEnd
 
-    // Source breakdown — all leads
-    for (const src of sources) {
-      if (!sourceMap[src]) sourceMap[src] = { leads: 0, closed: 0 }
-      sourceMap[src].leads++
-      if (stage === 'Converted') sourceMap[src].closed++
+    // Stage funnel counts — scoped to period
+    if (inPeriod) leadsByStage[stage] = (leadsByStage[stage] || 0) + 1
+
+    // Source breakdown — scoped to period
+    if (inPeriod) {
+      for (const src of sources) {
+        if (!sourceMap[src]) sourceMap[src] = { leads: 0, closed: 0 }
+        sourceMap[src].leads++
+        if (stage === 'Converted') sourceMap[src].closed++
+      }
     }
 
-    // Open leads
+    // Open leads (always current — powers action items)
     if (LEAD_OPEN.has(stage)) {
       openLeads++
       if (qual === 'Hot' && name && name !== 'undefined' && name.trim().length > 2) hotLeads.push(name)
@@ -117,9 +121,16 @@ export async function handler(req, res) {
     }
 
     // New leads this period
-    if (created >= fStart && created <= fEnd) newLeadsMTD++
-    if (stage === 'Converted') convertedTotal++
+    if (inPeriod) newLeadsMTD++
+    // Conv rate denominator: leads created in period
+    if (inPeriod && stage === 'Converted') convertedTotal++
   }
+
+  // Period lead count for conv rate denominator
+  const periodLeadCount = leads.filter(p => {
+    const c = new Date(p.created_time)
+    return c >= fStart && c <= fEnd
+  }).length
 
   // ── Deal metrics ──────────────────────────────────────────────────────────
   let openDeals = 0, pipelineValue = 0, closedWonMTD = 0
@@ -132,23 +143,38 @@ export async function handler(req, res) {
     const name      = getTitle(p['Deal Name']) || '(Unnamed)'
     const estValue  = getNumber(p['Estimated Value'])
     const closeDate = getDate(p['Actual Close Date'])
+    const created   = new Date(page.created_time)
     const lastEdit  = new Date(page.last_edited_time)
     const osComb    = getMulti(p['OS Combination'])
 
     if (!stage) continue
-    dealsByStage[stage] = (dealsByStage[stage] || 0) + 1
 
-    if (DEAL_OPEN.has(stage)) {
+    // A deal was active during the period if:
+    // created before end of period AND (still open OR closed on/after start of period)
+    const closedRef = closeDate ? new Date(closeDate) : null
+    const activeDuringPeriod = created <= fEnd && (
+      DEAL_OPEN.has(stage) ||
+      (closedRef && closedRef >= fStart) ||
+      (!closedRef && (stage === 'Closed-Won' || stage === 'Closed-Lost') && created >= fStart)
+    )
+
+    // Stage funnel — deals active during period
+    if (activeDuringPeriod) dealsByStage[stage] = (dealsByStage[stage] || 0) + 1
+
+    // Open deals + pipeline value — active and open during period
+    if (activeDuringPeriod && DEAL_OPEN.has(stage)) {
       openDeals++
       if (estValue) pipelineValue += estValue
-      if (lastEdit < staleThreshold) {
-        const daysStale = Math.floor((now - lastEdit) / 86400000)
-        if (name && name !== 'undefined' && name.trim().length > 2) stalledDeals.push({ name, stage, daysStale, os: osComb.join(' + ') || '—' })
-      }
+    }
+
+    // Stalled deals — always current (action items)
+    if (DEAL_OPEN.has(stage) && lastEdit < staleThreshold) {
+      const daysStale = Math.floor((now - lastEdit) / 86400000)
+      if (name && name !== 'undefined' && name.trim().length > 2) stalledDeals.push({ name, stage, daysStale, os: osComb.join(' + ') || '—' })
     }
 
     if (stage === 'Closed-Won') {
-      const ref = closeDate ? new Date(closeDate) : new Date(page.created_time)
+      const ref = closedRef || created
       if (ref >= fStart && ref <= fEnd) closedWonMTD++
     }
   }
@@ -169,7 +195,7 @@ export async function handler(req, res) {
     })
   }
 
-  const convRate = leads.length > 0 ? Math.round((convertedTotal / leads.length) * 100) : 0
+  const convRate = periodLeadCount > 0 ? Math.round((convertedTotal / periodLeadCount) * 100) : 0
   stalledDeals.sort((a, b) => b.daysStale - a.daysStale)
 
   const leadFunnel = LEAD_FUNNEL_ORDER.map(s => ({ stage: s, count: leadsByStage[s] || 0 }))

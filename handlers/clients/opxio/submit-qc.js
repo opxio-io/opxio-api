@@ -59,12 +59,22 @@ export async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end()
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' })
 
-  const { page_id } = req.body || {}
-  if (!page_id) return res.status(400).json({ error: 'Missing page_id' })
+  // Notion button webhooks send the page as body.data — body.page_id may be
+  // an uninterpolated "{{page_id}}" string if the template wasn't resolved.
+  const rawId      = req.body?.page_id
+  const isTemplate = typeof rawId === 'string' && rawId.startsWith('{{')
+  const page_id    = (!rawId || isTemplate)
+    ? (req.body?.data?.id || '').replace(/-/g, '')
+    : rawId.replace(/-/g, '')
+
+  if (!page_id) return res.status(400).json({ error: 'Missing page_id — expected body.page_id or body.data.id' })
 
   try {
     // 1. Fetch page and detect type via parent DB
-    const page       = await getPage(page_id, NOTION_KEY())
+    // If Notion already sent the full page in body.data, use it directly
+    const page       = (req.body?.data?.properties && req.body?.data?.parent)
+      ? req.body.data
+      : await getPage(page_id, NOTION_KEY())
     const parentDbId = (page?.parent?.database_id || '').replace(/-/g, '')
 
     let type

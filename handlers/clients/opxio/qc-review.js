@@ -1,8 +1,12 @@
 // ─── qc-review.js ─────────────────────────────────────────────────────────
-// GET /api/opxio/qc-review?token=&status=   → list QC items (read-only)
-// Actions (approve/reject/revision) are handled by qc-action.js via Notion buttons.
+// GET /api/clients/opxio/qc-review?token=&status=
+// Auth: session JWT (from Notion OAuth) OR widget access token.
+//
+// session=<jwt>   — reviewer personal session (issued by auth-callback)
+// token=<token>   — widget token (Supabase, fallback / programmatic)
 
-import { getClientByToken }            from '../../../lib/supabase.js'
+import { getClientByToken }        from '../../../lib/supabase.js'
+import { verifySession }           from '../../../lib/session.js'
 
 const QC_DB  = 'e9f3b2e857b3470d8d8bef749737d99b'
 const KEY    = () => process.env.NOTION_API_KEY
@@ -79,15 +83,36 @@ export async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end()
   if (req.method !== 'GET')     return res.status(405).json({ error: 'GET only' })
 
-  const token = req.query.token || req.headers['x-widget-token']
-  if (!token) return res.status(401).json({ error: 'Missing token' })
-  const client = await getClientByToken(token)
-  if (!client) return res.status(403).json({ error: 'Invalid token' })
+  // ── Auth: session JWT (preferred) or widget token ──────────────────────
+  const sessionToken = req.query.session || req.headers['x-session-token']
+  const widgetToken  = req.query.token   || req.headers['x-widget-token']
+  let   reviewer     = null
+
+  if (sessionToken) {
+    try {
+      const sess = verifySession(sessionToken)
+      reviewer   = sess.email
+      // session is valid — no need to hit Supabase
+    } catch (err) {
+      return res.status(401).json({ error: 'Session expired or invalid', detail: err.message })
+    }
+  } else if (widgetToken) {
+    const client = await getClientByToken(widgetToken)
+    if (!client) return res.status(403).json({ error: 'Invalid widget token' })
+    // widget token auth — no reviewer identity
+  } else {
+    return res.status(401).json({ error: 'Authentication required', hint: 'Provide session= (JWT) or token= (widget token)' })
+  }
 
   try {
     const status = req.query.status || null
     const items  = await fetchQcItems(status === 'all' ? null : status)
-    return res.status(200).json({ ok: true, count: items.length, items: items.map(parseQcItem) })
+    return res.status(200).json({
+      ok:       true,
+      count:    items.length,
+      reviewer: reviewer || null,
+      items:    items.map(parseQcItem),
+    })
   } catch (err) {
     console.error('[qc-review]', err)
     return res.status(500).json({ error: err.message || 'Internal error' })

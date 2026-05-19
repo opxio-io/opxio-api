@@ -6,6 +6,8 @@ import { handler as quotesPipeline }  from '../../../handlers/clients/opxio/quot
 import { handler as submitQc }        from '../../../handlers/clients/opxio/submit-qc.js'
 import { handler as qcReview }        from '../../../handlers/clients/opxio/qc-review.js'
 import { handler as qcAction }        from '../../../handlers/clients/opxio/qc-action.js'
+import { handler as authStart }       from '../../../handlers/clients/opxio/auth-start.js'
+import { handler as authCallback }    from '../../../handlers/clients/opxio/auth-callback.js'
 import { handler as debugWebhook }    from '../../../handlers/clients/opxio/debug-webhook.js'
 
 const router = Router()
@@ -17,6 +19,8 @@ router.all('/quotes-pipeline',  async (req, res) => { await quotesPipeline(req, 
 router.post('/submit-qc',       async (req, res) => { await submitQc(req, res) })
 router.get('/qc-review',        async (req, res) => { await qcReview(req, res) })
 router.post('/qc-action',       async (req, res) => { await qcAction(req, res) })
+router.get('/auth/start',       async (req, res) => { await authStart(req, res) })
+router.get('/auth/callback',    async (req, res) => { await authCallback(req, res) })
 router.all('/debug-webhook',    async (req, res) => { await debugWebhook(req, res) })
 
 export default router

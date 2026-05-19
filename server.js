@@ -49,10 +49,23 @@ const WIDGET_ORIGINS = [
   'https://widgets.opxio.io',
   'https://opxio.io',
 ]
+// Opxio internal routes also accept Notion webhook origin (button automations)
+const OPXIO_ORIGINS = [
+  ...WIDGET_ORIGINS,
+  'https://www.notion.so',
+  'https://notion.so',
+]
 function widgetOriginGuard(req, res, next) {
   const origin = req.headers.origin || ''
   const isLocal = origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1')
   const isAllowed = !origin || origin === 'null' || isLocal || WIDGET_ORIGINS.some(o => origin === o)
+  if (!isAllowed) return res.status(403).json({ error: 'Forbidden' })
+  next()
+}
+function opxioOriginGuard(req, res, next) {
+  const origin = req.headers.origin || ''
+  const isLocal = origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1')
+  const isAllowed = !origin || origin === 'null' || isLocal || OPXIO_ORIGINS.some(o => origin === o)
   if (!isAllowed) return res.status(403).json({ error: 'Forbidden' })
   next()
 }
@@ -119,7 +132,7 @@ async function startServer() {
   app.use('/api/clients/shin-supplies', widgetOriginGuard, cupterraRoutes)
 
   // Opxio internal
-  app.use('/api/clients/opxio', widgetOriginGuard, opxioRoutes)
+  app.use('/api/clients/opxio', opxioOriginGuard, opxioRoutes)
 
   app.use((req, res) => res.status(404).json({ error: 'Not found', path: req.path }))
   app.use((err, req, res, next) => {

@@ -103,6 +103,17 @@ const getDate     = p => p?.date?.start   || null
 const getCheckbox = p => p?.checkbox === true
 const getRelIds   = p => (p?.relation     || []).map(r => r.id)
 const getMultiSel = p => (p?.multi_select || []).map(s => s.name)
+const getFormula  = p => (p?.formula?.string ?? (p?.formula?.number != null ? String(p.formula.number) : null))
+
+// Bucket the Lead Tier formula string into priority | average | weak (defensive: ignores wording/emoji)
+function tierKey(raw) {
+  if (!raw) return null
+  const v = String(raw).toLowerCase()
+  if (v.includes('priorit')) return 'priority'
+  if (v.includes('weak'))    return 'weak'
+  if (v.includes('average') || v.includes('avg')) return 'average'
+  return null
+}
 
 // ── Stats computation (pure) ──────────────────────────────────────────────
 function computeStats({ pages, repMap, mStart, mEnd, now }) {
@@ -112,6 +123,7 @@ function computeStats({ pages, repMap, mStart, mEnd, now }) {
 
   let monthLeads = 0, quotationsSent = 0, closedWon = 0, closedLost = 0
   let followupsToday = 0, followupsNext3 = 0, overdueResponse = 0
+  const tierCount = { priority: 0, average: 0, weak: 0 }
   let daysToCloseSum = 0, daysToCloseCount = 0, quoteToWinSum = 0, quoteToWinCount = 0
 
   const stageCount = {}, productCount = {}, sourceCount = {}, sourceClosedCount = {}, repStats = {}
@@ -151,6 +163,8 @@ function computeStats({ pages, repMap, mStart, mEnd, now }) {
     if (inMonth) {
       monthLeads++
       repStats[repName].activities++
+      const tk = tierKey(getFormula(p['Lead Tier']))
+      if (tk) tierCount[tk]++
       const stageKey = status === 'Done' ? 'Closed Won' : status
       stageCount[stageKey] = (stageCount[stageKey] || 0) + 1
       for (const prod of products) productCount[prod] = (productCount[prod] || 0) + 1
@@ -178,9 +192,18 @@ function computeStats({ pages, repMap, mStart, mEnd, now }) {
     if (!isClosed) repStats[repName].activePipeline++
   }
 
-  const closeRate      = quotationsSent > 0 ? Math.round((closedWon / quotationsSent) * 100) : null
+  const closeRate = quotationsSent > 0 ? Math.round((closedWon / quotationsSent) * 100) : null
   const avgDaysToClose = daysToCloseCount > 0 ? Math.round(daysToCloseSum / daysToCloseCount) : null
   const avgQuoteToWin  = quoteToWinCount  > 0 ? Math.round(quoteToWinSum  / quoteToWinCount)  : null
+  const tierPct = n => monthLeads > 0 ? Math.round((n / monthLeads) * 100) : 0
+  const leadTiers = {
+    total: monthLeads,
+    tiers: [
+      { key: 'priority', label: 'Priority', count: tierCount.priority, pct: tierPct(tierCount.priority) },
+      { key: 'average',  label: 'Average',  count: tierCount.average,  pct: tierPct(tierCount.average) },
+      { key: 'weak',     label: 'Weak',     count: tierCount.weak,     pct: tierPct(tierCount.weak) },
+    ],
+  }
   const stageFunnel  = STAGE_ORDER.map(s => ({ stage: s, count: stageCount[s] || 0 }))
   const repBreakdown = Object.entries(repStats)
     .filter(([name]) => !EXCLUDED.includes(name))
@@ -188,7 +211,7 @@ function computeStats({ pages, repMap, mStart, mEnd, now }) {
     .sort((a, b) => b.closedWon - a.closedWon || b.activePipeline - a.activePipeline)
 
   return {
-    monthLeads, quotationsSent, closedWon, closedLost, closeRate, avgDaysToClose, avgQuoteToWin,
+    monthLeads, quotationsSent, closedWon, closedLost, closeRate, avgDaysToClose, avgQuoteToWin, leadTiers,
     live: { followupsToday, followupsNext3, overdueResponse },
     stageFunnel, repBreakdown,
     productBreakdown: productCount,

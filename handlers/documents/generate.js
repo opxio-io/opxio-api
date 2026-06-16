@@ -63,7 +63,7 @@ async function handleQuotation(pageId) {
     "Status":     { status: { name: "Draft" } },
     "Issue Date": { date: { start: new Date().toISOString().split("T")[0] } },
     ...(total > 0 ? { "Amount": { number: total } } : {}),
-    ...(currency   ? { "Currency": { select: { name: currency } } } : {}),
+    ...(data.currency ? { "Currency": { select: { name: data.currency } } } : {}),
     ...(data.quotation_no && data.title_prop_name
       ? { [data.title_prop_name]: { title: [{ text: { content: data.quotation_no } }] } }
       : {}),

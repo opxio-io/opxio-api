@@ -271,14 +271,28 @@ export function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" })
   }
 
-  // Notion webhooks send page ID in body.data.id — also accept query params for manual calls
-  const rawId = req.body?.data?.id || req.body?.page_id || req.body?.data?.page_id ||
-                req.query.page_id  || req.query.id
+  // Log full request so we can see exactly what Notion sends
+  console.log("[generate] method:", req.method)
+  console.log("[generate] query:", JSON.stringify(req.query))
+  console.log("[generate] body:", JSON.stringify(req.body))
 
-  // Reject unsubstituted Notion template literals like {{id}}
-  if (!rawId || rawId.includes("{{")) {
+  // Notion webhooks send page ID in various body shapes
+  const rawId =
+    req.body?.data?.id      ||
+    req.body?.entity?.id    ||
+    req.body?.pageId        ||
+    req.body?.page_id       ||
+    req.body?.data?.page_id ||
+    req.body?.id            ||
+    req.query.page_id       ||
+    req.query.id
+
+  if (!rawId || String(rawId).includes("{{")) {
+    console.log("[generate] rejected — rawId:", rawId)
     return res.status(400).json({
-      error: "Missing or invalid page_id. Notion button config: do NOT put page_id in the URL — Notion sends it automatically in the request body.",
+      error: "Missing or invalid page_id",
+      received_body: req.body,
+      received_query: req.query,
     })
   }
 

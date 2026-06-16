@@ -90,6 +90,17 @@ app.post('/api/debug-webhook', (req, res) => {
   res.json({ received: true, body: req.body })
 })
 
+// TEMP: capture last Notion webhook body for debugging
+let _lastCapture = null
+app.post('/api/capture', (req, res) => {
+  _lastCapture = { headers: req.headers, body: req.body, query: req.query, ts: new Date().toISOString() }
+  console.log('[capture] received:', JSON.stringify(_lastCapture, null, 2))
+  res.json({ ok: true })
+})
+app.get('/api/capture', (req, res) => {
+  res.json(_lastCapture || { empty: true })
+})
+
 const PORT = process.env.PORT || 3001
 
 async function startServer() {

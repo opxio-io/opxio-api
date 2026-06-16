@@ -272,11 +272,9 @@ export function handler(req, res) {
   }
 
   // Log full request so we can see exactly what Notion sends
-  console.log("[generate] method:", req.method)
-  console.log("[generate] query:", JSON.stringify(req.query))
-  console.log("[generate] body:", JSON.stringify(req.body))
+  console.log("[generate] method:", req.method, "query:", JSON.stringify(req.query), "body:", JSON.stringify(req.body))
 
-  // Notion webhooks send page ID in various body shapes
+  // Resolve page ID from all possible locations (GET query or POST body)
   const rawId =
     req.body?.data?.id      ||
     req.body?.entity?.id    ||
@@ -287,13 +285,11 @@ export function handler(req, res) {
     req.query.page_id       ||
     req.query.id
 
-  if (!rawId || String(rawId).includes("{{")) {
-    console.log("[generate] rejected — rawId:", rawId)
-    return res.status(400).json({
-      error: "Missing or invalid page_id",
-      received_body: req.body,
-      received_query: req.query,
-    })
+  // If ID looks like an unsubstituted Notion template ({{ID}}) or is missing,
+  // return 200 immediately so Notion doesn't show "failed to execute" — but skip PDF gen.
+  if (!rawId || /\{\{/.test(String(rawId))) {
+    console.log("[generate] no valid page_id — rawId:", rawId, "returning 200 to keep Notion happy")
+    return res.status(200).json({ status: "skipped", reason: "no_page_id", rawId: rawId || null })
   }
 
   const pageId = rawId.replace(/-/g, "")

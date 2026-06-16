@@ -83,14 +83,14 @@ app.use('/api/portal',    portalRoutes)
 app.use('/api/proposals', proposalRoutes)
 app.use('/api/private',   privateRoutes)
 
-// ── Temp debug endpoint — logs + stores raw Notion webhook payload ───────────
+// ── Temp debug endpoint — accepts GET+POST, stores + returns raw payload ──────
 let _lastWebhook = null
-app.post('/api/debug-webhook', (req, res) => {
-  _lastWebhook = { headers: req.headers, body: req.body, query: req.query, ts: new Date().toISOString() }
+app.all('/api/debug-webhook', (req, res) => {
+  _lastWebhook = { method: req.method, headers: req.headers, body: req.body, query: req.query, ts: new Date().toISOString() }
   console.log('[debug-webhook] captured:', JSON.stringify(_lastWebhook, null, 2))
-  res.json({ received: true, body: req.body })
+  res.json({ received: true, method: req.method, body: req.body, query: req.query })
 })
-app.get('/api/debug-webhook', (req, res) => {
+app.get('/api/debug-last', (req, res) => {
   res.json(_lastWebhook || { empty: true })
 })
 

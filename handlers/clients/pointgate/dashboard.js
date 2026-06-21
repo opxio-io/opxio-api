@@ -42,7 +42,10 @@ async function fetchTenantMap(token) {
   const map = {}
   for (const p of pages) {
     const id = p.id.replace(/-/g, '')
-    map[id] = plain(p.properties['Full Name']?.title || []) || ''
+    map[id] = {
+      name: plain(p.properties['Full Name']?.title || []) || '',
+      bf:   p.properties['Balance B/F (RM)']?.number ?? 0,
+    }
   }
   return map
 }
@@ -96,7 +99,7 @@ export async function handler(req, res) {
       // Tenant
       const tenRels   = (p['Tenant']?.relation || []).map(r => r.id.replace(/-/g, ''))
       const tenantId  = tenRels[0] || ''
-      const tenant    = tenantMap[tenantId] || ''
+      const tenData   = tenantMap[tenantId] || { name: '', bf: 0 }
 
       // Fields
       const month     = p['Payment Month']?.date?.start?.substring(0, 7) || ''
@@ -116,7 +119,8 @@ export async function handler(req, res) {
         id:      page.id,
         lot,
         block,
-        tenant,
+        tenant:  tenData.name,
+        bf:      tenData.bf,
         month,
         amtDue,
         amtPaid,
@@ -144,7 +148,7 @@ export async function handler(req, res) {
     const outstanding  = totalDue - totalPaid
     const rate         = totalDue > 0 ? (totalPaid / totalDue) * 100 : 0
 
-    // Unique blocks in data
+    // Unique blocks in full dataset (for filter pills)
     const blocks = [...new Set(
       payments
         .map(p => (p.properties['Property']?.relation?.[0]?.id.replace(/-/g, '') || ''))

@@ -1,10 +1,8 @@
 // handlers/clients/pointgate/dashboard.js
-// Rent payment dashboard data for Pointgate HQ widget
-// GET /api/clients/pointgate/dashboard?month=2026-06&block=3416&status=Paid
-//
-// Tenant resolution for historical records (no Tenant relation on payment):
-//   1. Lease map (Leases DB, property+date range) — if DB is accessible
-//   2. propToTenants fallback (Tenants DB, property relation) — single-tenant properties only
+// Tenant resolution for historical records:
+//   1. Direct Tenant relation on payment page (2026 records)
+//   2. Lease lookup: parse lot from Agreement Title, match tenant by "Additional Tenants" text → nameToTenantId
+//   3. propToTenants fallback (single-tenant properties via Tenant.Property relation)
 
 import { queryDB, plain }               from '../../../lib/notion.js'
 import { cacheGet, cacheSet, cacheKey } from '../../../lib/cache.js'
@@ -18,7 +16,7 @@ const PG = {
   LEASES:     'e01bc0b044b24870a4158820fe819a07',
 }
 
-const CK = cacheKey('pointgate', 'dashboard', 'v3')
+const CK = cacheKey('pointgate', 'dashboard', 'v4')
 
 // ── Notion fetchers ────────────────────────────────────────────────────────
 
@@ -26,59 +24,81 @@ async function fetchPayments(token) {
   return queryDB(PG.PAYMENTS, undefined, token)
 }
 
-async function fetchPropMap(token) {
+// Returns:
+//   propMap:       propId   → lot name (e.g. "3420-B")
+//   reversePropMap: lot name → propId  (for lease title matching)
+async function fetchPropMaps(token) {
   const pages = await queryDB(PG.PROPERTIES, undefined, token)
-  const map = {}
+  const propMap = {}
+  const reversePropMap = {}
   for (const p of pages) {
-    const id = p.id.replace(/-/g, '')
-    map[id] = plain(p.properties['Property Name']?.title || []) || id
+    const id  = p.id.replace(/-/g, '')
+    const lot = plain(p.properties['Property Name']?.title || []) || id
+    propMap[id]          = lot
+    reversePropMap[lot.toLowerCase()] = id
   }
-  return map
+  return { propMap, reversePropMap }
 }
 
-// Returns { tenantMap, propToTenants }
-// tenantMap:     tenantId → { name, bf }
-// propToTenants: propId   → [tenantId, ...] (used for historical fallback)
+// Returns:
+//   tenantMap:      tenantId → { name, bf }
+//   nameToTenantId: lowercase name → tenantId  (for lease "Additional Tenants" matching)
+//   propToTenants:  propId → [tenantId, ...]    (DUAL relation fallback)
 async function fetchTenantData(token) {
   const pages = await queryDB(PG.TENANTS, undefined, token)
-  const tenantMap = {}
-  const propToTenants = {}
+  const tenantMap      = {}
+  const nameToTenantId = {}
+  const propToTenants  = {}
   for (const p of pages) {
     const id   = p.id.replace(/-/g, '')
     const name = plain(p.properties['Full Name']?.title || []) || ''
     const bf   = p.properties['Balance B/F (RM)']?.number ?? 0
     tenantMap[id] = { name, bf }
+    if (name) nameToTenantId[name.toLowerCase()] = id
 
-    // Collect property links (DUAL relation from Tenants → Properties)
+    // Property relation (DUAL) — populated for some tenants
     const propRels = (p.properties['Property']?.relation || []).map(r => r.id.replace(/-/g, ''))
     for (const propId of propRels) {
       if (!propToTenants[propId]) propToTenants[propId] = []
       propToTenants[propId].push(id)
     }
   }
-  return { tenantMap, propToTenants }
+  return { tenantMap, nameToTenantId, propToTenants }
 }
 
-// Lease-based fallback: property+date → tenantId
-// Returns {} if Leases DB not accessible (graceful)
-async function fetchLeaseMap(token) {
+// Build leaseMap: propId → [{tenantId, start, end}]
+// Resolves property via lot code parsed from Agreement Title
+// Resolves tenant via "Additional Tenants" text field matched against nameToTenantId
+// Graceful: returns {} if DB not accessible
+async function fetchLeaseMap(token, reversePropMap, nameToTenantId) {
   try {
     const pages = await queryDB(PG.LEASES, undefined, token)
     const map = {}
     for (const p of pages) {
-      const propRels = (p.properties['Property']?.relation || []).map(r => r.id.replace(/-/g, ''))
-      const tenRels  = (p.properties['Primary Tenant']?.relation || []).map(r => r.id.replace(/-/g, ''))
-      const start    = p.properties['Start Date']?.date?.start || null
-      const end      = p.properties['End Date']?.date?.start   || null
-      if (!propRels[0] || !tenRels[0]) continue
-      const propId = propRels[0]
+      const title   = plain(p.properties['Agreement Title']?.title || [])
+      const tenName = p.properties['Additional Tenants']?.rich_text?.map(t => t.plain_text).join('').trim() || ''
+
+      // Parse lot from title: "Lease #156 – 3420-B" → "3420-B"
+      const lotMatch = title.match(/[–—-]\s*(.+)$/)
+      const lot      = lotMatch ? lotMatch[1].trim() : ''
+      const propId   = reversePropMap[lot.toLowerCase()] || ''
+
+      // Match tenant by name (also try relation field)
+      const tenRels   = (p.properties['Primary Tenant']?.relation || []).map(r => r.id.replace(/-/g, ''))
+      const tenantId  = tenRels[0] || nameToTenantId[tenName.toLowerCase()] || ''
+
+      if (!propId || !tenantId) continue
+
+      const start = p.properties['Start Date']?.date?.start || null
+      const end   = p.properties['End Date']?.date?.start   || null
       if (!map[propId]) map[propId] = []
-      map[propId].push({ tenantId: tenRels[0], start, end })
+      map[propId].push({ tenantId, start, end })
     }
+    // Sort by start desc so most recent lease is checked first
     for (const id of Object.keys(map)) {
       map[id].sort((a, b) => (b.start || '').localeCompare(a.start || ''))
     }
-    console.log(`[pointgate:dashboard] leaseMap loaded: ${Object.keys(map).length} properties`)
+    console.log(`[pointgate:dashboard] leaseMap: ${Object.keys(map).length} properties resolved`)
     return map
   } catch (e) {
     console.warn('[pointgate:dashboard] leaseMap unavailable:', e.message)
@@ -89,17 +109,18 @@ async function fetchLeaseMap(token) {
 function resolveTenantFromLeases(leaseMap, propId, month) {
   const leases = leaseMap[propId]
   if (!leases) return null
+  // If dates exist, use them; otherwise just return first (most recent by sort)
   const mStart = month + '-01'
   const mEnd   = month + '-31'
   for (const l of leases) {
-    const leaseStart = l.start || '0000-01-01'
-    const leaseEnd   = l.end   || '9999-12-31'
-    if (leaseStart <= mEnd && leaseEnd >= mStart) return l.tenantId
+    const s = l.start || '0000-01-01'
+    const e = l.end   || '9999-12-31'
+    if (s <= mEnd && e >= mStart) return l.tenantId
   }
-  return null
+  // Fallback: return most recent if no date match (e.g. import dates are wrong)
+  return leases[0]?.tenantId || null
 }
 
-// Single-tenant fallback: if only one tenant ever linked to property, use them
 function resolveTenantFromPropMap(propToTenants, propId) {
   const tenants = propToTenants[propId]
   if (!tenants || tenants.length !== 1) return null
@@ -107,12 +128,13 @@ function resolveTenantFromPropMap(propToTenants, propId) {
 }
 
 async function fetchAll(token) {
-  const [payments, propMap, { tenantMap, propToTenants }, leaseMap] = await Promise.all([
+  const [payments, { propMap, reversePropMap }, { tenantMap, nameToTenantId, propToTenants }] = await Promise.all([
     fetchPayments(token),
-    fetchPropMap(token),
+    fetchPropMaps(token),
     fetchTenantData(token),
-    fetchLeaseMap(token),
   ])
+  // leaseMap needs reversePropMap + nameToTenantId, fetch after
+  const leaseMap = await fetchLeaseMap(token, reversePropMap, nameToTenantId)
   return { payments, propMap, tenantMap, propToTenants, leaseMap }
 }
 
@@ -150,9 +172,9 @@ export async function handler(req, res) {
       const block    = lot.match(/^\d{4}/)?.[0] || ''
       const month    = p['Payment Month']?.date?.start?.substring(0, 7) || ''
 
-      // Tenant resolution: direct → lease date → single-tenant property fallback
-      const tenRels  = (p['Tenant']?.relation || []).map(r => r.id.replace(/-/g, ''))
-      let tenantId   = tenRels[0] || ''
+      // Tenant resolution: direct → lease title match → single-tenant property fallback
+      const tenRels = (p['Tenant']?.relation || []).map(r => r.id.replace(/-/g, ''))
+      let tenantId  = tenRels[0] || ''
       if (!tenantId && propId && month) {
         tenantId =
           resolveTenantFromLeases(leaseMap, propId, month) ||

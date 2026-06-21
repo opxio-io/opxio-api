@@ -9,7 +9,7 @@ import { patchPage }                    from '../../../lib/notion.js'
 import { cacheDelete, cacheKey }        from '../../../lib/cache.js'
 
 const NOTION_KEY = () => process.env.POINTGATE_NOTION_KEY || process.env.NOTION_API_KEY
-const DASHBOARD_CK = cacheKey('pointgate', 'dashboard', 'v3')
+const DASHBOARD_CK = cacheKey('pointgate', 'dashboard', 'v4')
 
 const VALID_STATUSES = new Set(['Paid', 'Partial', 'Overdue', 'Pending'])
 const VALID_METHODS  = new Set(['Cash', 'Bank Transfer', 'Online Banking', 'Cheque', ''])

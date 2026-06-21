@@ -2,10 +2,9 @@
 // Rent payment dashboard data for Pointgate HQ widget
 // GET /api/clients/pointgate/dashboard?month=2026-06&block=3416&status=Paid
 //
-// Cache strategy: raw Notion pages cached 5 min (stale-while-revalidate 30 min)
-// Filtering happens in-memory after cache hit — filter changes are instant.
-// Tenant resolution: if payment record has no Tenant relation (historical data),
-// falls back to Leases DB lookup by property + month overlap.
+// Tenant resolution for historical records (no Tenant relation on payment):
+//   1. Lease map (Leases DB, property+date range) — if DB is accessible
+//   2. propToTenants fallback (Tenants DB, property relation) — single-tenant properties only
 
 import { queryDB, plain }               from '../../../lib/notion.js'
 import { cacheGet, cacheSet, cacheKey } from '../../../lib/cache.js'
@@ -16,7 +15,7 @@ const PG = {
   PAYMENTS:   'cdc0a5b7e9384afabdc83cb24004f6f8',
   PROPERTIES: '979e0918c8db459694657c30743c4846',
   TENANTS:    '11bc170f3fc643b2b0e12ef9ef712300',
-  LEASES:     'e01bc0b0-44b2-4870-a415-8820fe819a07'.replace(/-/g, ''),
+  LEASES:     'e01bc0b044b24870a4158820fe819a07',
 }
 
 const CK = cacheKey('pointgate', 'dashboard', 'v3')
@@ -37,47 +36,56 @@ async function fetchPropMap(token) {
   return map
 }
 
-async function fetchTenantMap(token) {
+// Returns { tenantMap, propToTenants }
+// tenantMap:     tenantId → { name, bf }
+// propToTenants: propId   → [tenantId, ...] (used for historical fallback)
+async function fetchTenantData(token) {
   const pages = await queryDB(PG.TENANTS, undefined, token)
-  const map = {}
+  const tenantMap = {}
+  const propToTenants = {}
   for (const p of pages) {
-    const id = p.id.replace(/-/g, '')
-    map[id] = {
-      name: plain(p.properties['Full Name']?.title || []) || '',
-      bf:   p.properties['Balance B/F (RM)']?.number ?? 0,
+    const id   = p.id.replace(/-/g, '')
+    const name = plain(p.properties['Full Name']?.title || []) || ''
+    const bf   = p.properties['Balance B/F (RM)']?.number ?? 0
+    tenantMap[id] = { name, bf }
+
+    // Collect property links (DUAL relation from Tenants → Properties)
+    const propRels = (p.properties['Property']?.relation || []).map(r => r.id.replace(/-/g, ''))
+    for (const propId of propRels) {
+      if (!propToTenants[propId]) propToTenants[propId] = []
+      propToTenants[propId].push(id)
     }
   }
-  return map
+  return { tenantMap, propToTenants }
 }
 
-// Build map: propertyId → [{tenantId, start, end}] sorted by start desc
-// Used to resolve tenant for historical payments with no Tenant relation
+// Lease-based fallback: property+date → tenantId
+// Returns {} if Leases DB not accessible (graceful)
 async function fetchLeaseMap(token) {
   try {
-  const pages = await queryDB(PG.LEASES, undefined, token)
-  const map = {}
-  for (const p of pages) {
-    const propRels = (p.properties['Property']?.relation || []).map(r => r.id.replace(/-/g, ''))
-    const tenRels  = (p.properties['Primary Tenant']?.relation || []).map(r => r.id.replace(/-/g, ''))
-    const start    = p.properties['Start Date']?.date?.start || null
-    const end      = p.properties['End Date']?.date?.start   || null
-    if (!propRels[0] || !tenRels[0]) continue
-    const propId = propRels[0]
-    if (!map[propId]) map[propId] = []
-    map[propId].push({ tenantId: tenRels[0], start, end })
-  }
-  // Sort each property's leases by start date desc (most recent first)
-  for (const id of Object.keys(map)) {
-    map[id].sort((a, b) => (b.start || '').localeCompare(a.start || ''))
-  }
-  return map
+    const pages = await queryDB(PG.LEASES, undefined, token)
+    const map = {}
+    for (const p of pages) {
+      const propRels = (p.properties['Property']?.relation || []).map(r => r.id.replace(/-/g, ''))
+      const tenRels  = (p.properties['Primary Tenant']?.relation || []).map(r => r.id.replace(/-/g, ''))
+      const start    = p.properties['Start Date']?.date?.start || null
+      const end      = p.properties['End Date']?.date?.start   || null
+      if (!propRels[0] || !tenRels[0]) continue
+      const propId = propRels[0]
+      if (!map[propId]) map[propId] = []
+      map[propId].push({ tenantId: tenRels[0], start, end })
+    }
+    for (const id of Object.keys(map)) {
+      map[id].sort((a, b) => (b.start || '').localeCompare(a.start || ''))
+    }
+    console.log(`[pointgate:dashboard] leaseMap loaded: ${Object.keys(map).length} properties`)
+    return map
   } catch (e) {
-    console.warn('[pointgate:dashboard] fetchLeaseMap failed (DB not shared with integration?):', e.message)
+    console.warn('[pointgate:dashboard] leaseMap unavailable:', e.message)
     return {}
   }
 }
 
-// Return tenantId for the lease active during a given YYYY-MM month
 function resolveTenantFromLeases(leaseMap, propId, month) {
   const leases = leaseMap[propId]
   if (!leases) return null
@@ -86,20 +94,26 @@ function resolveTenantFromLeases(leaseMap, propId, month) {
   for (const l of leases) {
     const leaseStart = l.start || '0000-01-01'
     const leaseEnd   = l.end   || '9999-12-31'
-    // Lease overlaps with payment month if lease started <= month end AND lease ended >= month start
     if (leaseStart <= mEnd && leaseEnd >= mStart) return l.tenantId
   }
   return null
 }
 
+// Single-tenant fallback: if only one tenant ever linked to property, use them
+function resolveTenantFromPropMap(propToTenants, propId) {
+  const tenants = propToTenants[propId]
+  if (!tenants || tenants.length !== 1) return null
+  return tenants[0]
+}
+
 async function fetchAll(token) {
-  const [payments, propMap, tenantMap, leaseMap] = await Promise.all([
+  const [payments, propMap, { tenantMap, propToTenants }, leaseMap] = await Promise.all([
     fetchPayments(token),
     fetchPropMap(token),
-    fetchTenantMap(token),
+    fetchTenantData(token),
     fetchLeaseMap(token),
   ])
-  return { payments, propMap, tenantMap, leaseMap }
+  return { payments, propMap, tenantMap, propToTenants, leaseMap }
 }
 
 // ── Main handler ───────────────────────────────────────────────────────────
@@ -109,7 +123,6 @@ export async function handler(req, res) {
   try {
     const token = NOTION_KEY()
 
-    // Cache check (stale-while-revalidate)
     let result = cacheGet(CK)
     if (!result) {
       const fresh = await fetchAll(token)
@@ -121,83 +134,65 @@ export async function handler(req, res) {
       )
     }
 
-    const { payments, propMap, tenantMap, leaseMap } = result.data
+    const { payments, propMap, tenantMap, propToTenants, leaseMap } = result.data
 
-    // Parse query filters
-    const filterMonth  = req.query.month  || null   // e.g. "2026-06"
-    const filterBlock  = req.query.block  || null   // e.g. "3416"
-    const filterStatus = req.query.status || null   // e.g. "Paid"
+    const filterMonth  = req.query.month  || null
+    const filterBlock  = req.query.block  || null
+    const filterStatus = req.query.status || null
 
-    // Build rows from raw Notion pages
     const rows = []
     for (const page of payments) {
       const p = page.properties
 
-      // Property (lot)
-      const propRels  = (p['Property']?.relation || []).map(r => r.id.replace(/-/g, ''))
-      const propId    = propRels[0] || ''
-      const lot       = propMap[propId] || propId || '—'
-      const block     = lot.match(/^\d{4}/)?.[0] || ''
+      const propRels = (p['Property']?.relation || []).map(r => r.id.replace(/-/g, ''))
+      const propId   = propRels[0] || ''
+      const lot      = propMap[propId] || propId || '—'
+      const block    = lot.match(/^\d{4}/)?.[0] || ''
+      const month    = p['Payment Month']?.date?.start?.substring(0, 7) || ''
 
-      // Fields (needed for fallback lookup)
-      const month     = p['Payment Month']?.date?.start?.substring(0, 7) || ''
-
-      // Tenant — prefer direct relation on payment record, fall back to lease lookup
-      const tenRels   = (p['Tenant']?.relation || []).map(r => r.id.replace(/-/g, ''))
-      let tenantId    = tenRels[0] || ''
+      // Tenant resolution: direct → lease date → single-tenant property fallback
+      const tenRels  = (p['Tenant']?.relation || []).map(r => r.id.replace(/-/g, ''))
+      let tenantId   = tenRels[0] || ''
       if (!tenantId && propId && month) {
-        tenantId = resolveTenantFromLeases(leaseMap, propId, month) || ''
+        tenantId =
+          resolveTenantFromLeases(leaseMap, propId, month) ||
+          resolveTenantFromPropMap(propToTenants, propId) ||
+          ''
       }
-      const tenData   = tenantMap[tenantId] || { name: '', bf: 0 }
+      const tenData = tenantMap[tenantId] || { name: '', bf: 0 }
 
-      const status    = p['Status']?.select?.name     || 'Pending'
-      const amtDue    = p['Amount Due (RM)']?.number  ?? 0
-      const amtPaid   = p['Paid']?.number             ?? 0
-      const method    = p['Payment Method']?.select?.name || ''
-      const payDate   = p['Payment Date']?.date?.start || null
-      const dueDate   = p['Due Date']?.date?.start    || null
-      const receiptUrl = p['Receipt URL']?.url        || null
+      const status     = p['Status']?.select?.name          || 'Pending'
+      const amtDue     = p['Amount Due (RM)']?.number       ?? 0
+      const amtPaid    = p['Paid']?.number                  ?? 0
+      const method     = p['Payment Method']?.select?.name  || ''
+      const payDate    = p['Payment Date']?.date?.start     || null
+      const dueDate    = p['Due Date']?.date?.start         || null
+      const receiptUrl = p['Receipt URL']?.url              || null
 
-      // Apply filters
       if (filterMonth  && month  !== filterMonth)  continue
       if (filterBlock  && block  !== filterBlock)  continue
       if (filterStatus && status !== filterStatus) continue
 
       rows.push({
-        id:      page.id,
-        lot,
-        block,
-        tenant:  tenData.name,
-        bf:      tenData.bf,
-        month,
-        amtDue,
-        amtPaid,
+        id: page.id, lot, block,
+        tenant: tenData.name, bf: tenData.bf,
+        month, amtDue, amtPaid,
         balance: amtDue - amtPaid,
-        status,
-        method,
-        payDate,
-        dueDate,
-        receiptUrl,
+        status, method, payDate, dueDate, receiptUrl,
       })
     }
 
-    // Dedup: keep one row per lot+month (first seen = most recent Notion page)
+    // Dedup: keep first per lot+month
     const seen = new Map()
     for (const row of rows) {
       const key = `${row.lot}__${row.month}`
       if (!seen.has(key)) seen.set(key, row)
     }
-    const deduped = [...seen.values()]
-
-    // Sort by lot code (alphanumeric), then month
-    deduped.sort((a, b) =>
+    const rows_final = [...seen.values()].sort((a, b) =>
       a.lot.localeCompare(b.lot, 'en', { numeric: true }) ||
       a.month.localeCompare(b.month)
     )
 
-    const rows_final = deduped
-
-    // Compute KPIs
     const total        = rows_final.length
     const paidCount    = rows_final.filter(r => r.status === 'Paid').length
     const partialCount = rows_final.filter(r => r.status === 'Partial').length
@@ -207,7 +202,6 @@ export async function handler(req, res) {
     const outstanding  = totalDue - totalPaid
     const rate         = totalDue > 0 ? (totalPaid / totalDue) * 100 : 0
 
-    // Unique blocks in full dataset (for filter pills)
     const blocks = [...new Set(
       payments
         .map(p => (p.properties['Property']?.relation?.[0]?.id.replace(/-/g, '') || ''))
@@ -218,10 +212,8 @@ export async function handler(req, res) {
     res.set('X-Cache', result.stale ? 'STALE' : 'HIT')
     res.json({
       kpi: { total, paidCount, partialCount, overdueCount, totalDue, totalPaid, outstanding, rate },
-      rows: rows_final,
-      blocks,
-      ts:      new Date().toISOString(),
-      latency: Date.now() - t0,
+      rows: rows_final, blocks,
+      ts: new Date().toISOString(), latency: Date.now() - t0,
     })
   } catch (err) {
     console.error('[pointgate:dashboard] error:', err.message, err.stack)

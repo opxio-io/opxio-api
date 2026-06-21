@@ -115,6 +115,8 @@ export async function handler(req, res) {
       if (filterBlock  && block  !== filterBlock)  continue
       if (filterStatus && status !== filterStatus) continue
 
+      const receiptUrl = p['Receipt URL']?.url || null
+
       rows.push({
         id:      page.id,
         lot,
@@ -129,6 +131,7 @@ export async function handler(req, res) {
         method,
         payDate,
         dueDate,
+        receiptUrl,
       })
     }
 

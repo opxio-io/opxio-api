@@ -4,6 +4,7 @@ import { handler as statementHandler }  from '../../../handlers/clients/pointgat
 import { handler as dashboardHandler }  from '../../../handlers/clients/pointgate/dashboard.js'
 import { handler as paymentHandler }    from '../../../handlers/clients/pointgate/payment.js'
 import { handler as receiptHandler }    from '../../../handlers/clients/pointgate/receipt.js'
+import { handler as invoiceHandler }    from '../../../handlers/clients/pointgate/invoice.js'
 
 const router = Router()
 
@@ -13,6 +14,7 @@ router.get('/dashboard',  dashboardHandler)
 router.patch('/payment',  paymentHandler)
 router.post('/payment',   paymentHandler)
 router.post('/receipt',   receiptHandler)
+router.post('/invoice',   invoiceHandler)
 
 router.get('/', (_req, res) => res.json({ ok: true, client: 'pointgate' }))
 

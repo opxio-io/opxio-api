@@ -1,14 +1,13 @@
 // handlers/clients/pointgate/invoice.js
-// Per-payment invoice PDF generator for Pointgate Properties
 // POST /api/clients/pointgate/invoice
 // Body: { pageId, lot, tenant, month, bf, amtDue, amtPaid, status, method, payDate, dueDate }
 // Returns: { url, invNum }
 
 import PDFDocument from 'pdfkit'
-import { hdrs, NOTION_VERSION, patchPage } from '../../../lib/notion.js'
+import { hdrs, patchPage } from '../../../lib/notion.js'
 import { uploadBlob } from '../../../lib/blob.js'
 
-const NOTION_KEY = () => process.env.POINTGATE_NOTION_KEY || process.env.NOTION_API_KEY
+const NOTION_KEY  = () => process.env.POINTGATE_NOTION_KEY || process.env.NOTION_API_KEY
 const PAYMENTS_DB = 'cdc0a5b7e9384afabdc83cb24004f6f8'
 
 // ── One-time DB schema setup ───────────────────────────────────────────────
@@ -27,13 +26,12 @@ async function ensureDbSchema(token) {
       })
     })
     dbSchemaReady = true
-    console.log('[pointgate:invoice] DB schema ready')
   } catch (e) {
-    console.warn('[pointgate:invoice] db schema setup failed:', e.message)
+    console.warn('[pointgate:invoice] db schema setup:', e.message)
   }
 }
 
-// ── Format helpers ─────────────────────────────────────────────────────────
+// ── Helpers ────────────────────────────────────────────────────────────────
 function fmtDate(iso) {
   if (!iso) return '—'
   try {
@@ -46,8 +44,8 @@ function fmtDate(iso) {
 function fmtRM(num) {
   if (num === null || num === undefined || isNaN(num)) return '—'
   const abs = Math.abs(num)
-  const formatted = 'RM ' + abs.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
-  return num < 0 ? '(' + formatted + ')' : formatted
+  const str = 'RM ' + abs.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+  return num < 0 ? '(' + str + ')' : str
 }
 
 function fmtMonth(ym) {
@@ -65,35 +63,33 @@ function priorMonth(ym) {
   return `${y}-${String(m - 1).padStart(2, '0')}`
 }
 
-// ── PDF builder ────────────────────────────────────────────────────────────
+// ── PDF ────────────────────────────────────────────────────────────────────
 export async function handler(req, res) {
   try {
-    const {
-      pageId, lot = '—', tenant = '—', month = '',
+    let {
+      pageId, lot = '—', tenant = '', month = '',
       bf = 0, amtDue = 0, amtPaid = 0, status = '—',
-      method = '—', payDate = null, dueDate = null,
+      method = '', payDate = null, dueDate = null,
     } = req.body || {}
 
     if (!pageId) return res.status(400).json({ error: 'Missing pageId' })
 
-    const token     = NOTION_KEY()
-    const totalOwed = (bf || 0) + (amtDue || 0)
-    const balance   = totalOwed - (amtPaid || 0)
+    bf      = Number(bf)      || 0
+    amtDue  = Number(amtDue)  || 0
+    amtPaid = Number(amtPaid) || 0
 
-    // Ensure DB has Invoice No + Invoice PDF fields
+    const token      = NOTION_KEY()
+    const totalOwed  = bf + amtDue
+    const balance    = totalOwed - amtPaid
+    const isCleared  = balance <= 0
+
     await ensureDbSchema(token)
 
-    // Invoice number (deterministic: lot + month)
-    const lotSafe   = (lot || 'XX').replace(/[^A-Z0-9]/gi, '').toUpperCase()
+    // Invoice number — deterministic per lot+month
+    const lotSafe   = (lot || 'XX').replace(/[^A-Z0-9\-]/gi, '').toUpperCase()
     const monthSafe = (month || '').replace('-', '')
     const invNum    = `INV-${lotSafe}-${monthSafe}`
 
-    // Tenant address
-    const tenantAddr = lot && lot !== '—'
-      ? [`Lot ${lot}, Jalan Merbau`, 'Kampung Melayu Subang', '40150 Shah Alam, Selangor']
-      : ['Kampung Melayu Subang', '40150 Shah Alam, Selangor']
-
-    // ── Build PDF ──────────────────────────────────────────────────────────
     const doc = new PDFDocument({ size: 'A4', margin: 0 })
     const chunks = []
     doc.on('data', c => chunks.push(c))
@@ -101,213 +97,187 @@ export async function handler(req, res) {
     const W  = doc.page.width   // 595.28
     const H  = doc.page.height  // 841.89
     const M  = 50
-    const CW = W - M * 2
+    const CW = W - M * 2       // 495.28
 
     // ── HEADER ─────────────────────────────────────────────────────────────
-    doc.rect(0, 0, W, 110).fill('#111111')
+    doc.rect(0, 0, W, 120).fill('#111111')
 
-    // Company wordmark (white)
-    doc.fillColor('#FFFFFF').fontSize(22).font('Helvetica-Bold')
-       .text('POINTGATE', M, 25, { lineBreak: false })
-    doc.fillColor('#999999').fontSize(9).font('Helvetica')
-       .text('PROPERTIES SDN BHD', M, 50, { lineBreak: false })
+    // Full company name (white, prominent)
+    doc.fillColor('#FFFFFF').fontSize(20).font('Helvetica-Bold')
+       .text('Pointgate Properties Sdn Bhd', M, 28, { lineBreak: false })
+    doc.fillColor('#888888').fontSize(8.5).font('Helvetica')
+       .text('Lot 3417-13, Jalan Merbau, Kampung Melayu Subang, 40150 Shah Alam, Selangor', M, 52, { lineBreak: false })
 
-    // Company contact (header right, stacked)
-    const co = [
-      'pgprop@pointgate.net',
-      '+60 12-457 4600',
-    ]
-    doc.fillColor('#888888').fontSize(8).font('Helvetica')
-    co.forEach((line, i) => {
-      doc.text(line, 0, 25 + i * 13, { align: 'right', lineBreak: false, width: W - M })
-    })
+    // Contact top-right
+    doc.fillColor('#AAAAAA').fontSize(8.5).font('Helvetica')
+       .text('pgprop@pointgate.net', 0, 35, { align: 'right', lineBreak: false, width: W - M })
+       .text('+60 12-457 4600', 0, 50, { align: 'right', lineBreak: false, width: W - M })
 
-    // Lime green accent bar at bottom of header
-    doc.rect(0, 108, W, 2).fill('#AAFF00')
+    // Lime accent bar
+    doc.rect(0, 118, W, 2).fill('#AAFF00')
 
-    // ── INVOICE LABEL BAND ─────────────────────────────────────────────────
-    doc.rect(0, 110, W, 42).fill('#1A1A1A')
+    // ── INVOICE BAND ───────────────────────────────────────────────────────
+    doc.rect(0, 120, W, 44).fill('#1A1A1A')
     doc.fillColor('#FFFFFF').fontSize(18).font('Helvetica-Bold')
-       .text('INVOICE', M, 121, { lineBreak: false })
-    doc.fillColor('#666666').fontSize(9).font('Helvetica')
-       .text(invNum, 0, 124, { align: 'right', lineBreak: false, width: W - M })
-    doc.fillColor('#666666').fontSize(8)
+       .text('INVOICE', M, 132, { lineBreak: false })
+    doc.fillColor('#777777').fontSize(9).font('Helvetica')
+       .text(invNum, 0, 132, { align: 'right', lineBreak: false, width: W - M })
        .text(new Date().toLocaleDateString('en-MY', { day: '2-digit', month: 'short', year: 'numeric' }),
-         0, 137, { align: 'right', lineBreak: false, width: W - M })
+         0, 146, { align: 'right', lineBreak: false, width: W - M })
 
-    // ── BILLED-TO / COMPANY ADDRESS BLOCK ─────────────────────────────────
-    let y = 175
+    // ── FROM / BILLED TO ───────────────────────────────────────────────────
+    let y = 185
+    const colL = M
+    const colR = M + CW / 2 + 10   // ~307
 
-    // Left: FROM (company address)
-    doc.fillColor('#999999').fontSize(7.5).font('Helvetica')
-       .text('FROM', M, y)
-    doc.fillColor('#333333').fontSize(9).font('Helvetica-Bold')
-       .text('Pointgate Properties Sdn Bhd', M, y + 12)
-    const fromAddr = [
-      'Lot 3417-13, Jalan Merbau',
-      'Kampung Melayu Subang',
-      '40150 Shah Alam, Selangor',
-    ]
+    // FROM (left)
+    doc.fillColor('#AAAAAA').fontSize(7.5).font('Helvetica')
+       .text('FROM', colL, y, { lineBreak: false })
+    doc.fillColor('#222222').fontSize(10).font('Helvetica-Bold')
+       .text('Pointgate Properties Sdn Bhd', colL, y + 13, { lineBreak: false })
     doc.fillColor('#555555').fontSize(8.5).font('Helvetica')
-    fromAddr.forEach((line, i) => doc.text(line, M, y + 24 + i * 12))
+    ;['Lot 3417-13, Jalan Merbau', 'Kampung Melayu Subang', '40150 Shah Alam, Selangor']
+      .forEach((line, i) => doc.text(line, colL, y + 27 + i * 13, { lineBreak: false }))
 
-    // Right: BILLED TO (tenant address)
-    const midX = W / 2 + 10
-    doc.fillColor('#999999').fontSize(7.5).font('Helvetica')
-       .text('BILLED TO', midX, y)
+    // BILLED TO (right)
+    const tenantDisplay = (tenant && tenant !== '—') ? tenant : '—'
+    doc.fillColor('#AAAAAA').fontSize(7.5).font('Helvetica')
+       .text('BILLED TO', colR, y, { lineBreak: false })
     doc.fillColor('#111111').fontSize(11).font('Helvetica-Bold')
-       .text(tenant, midX, y + 12)
+       .text(tenantDisplay, colR, y + 13, { width: CW / 2 - 20, lineBreak: false })
     doc.fillColor('#555555').fontSize(8.5).font('Helvetica')
-    tenantAddr.forEach((line, i) => doc.text(line, midX, y + 26 + i * 12))
+    ;[`Lot ${lot}, Jalan Merbau`, 'Kampung Melayu Subang', '40150 Shah Alam, Selangor']
+      .forEach((line, i) => doc.text(line, colR, y + 27 + i * 13, { lineBreak: false }))
 
     // Divider
-    y += 85
-    doc.moveTo(M, y).lineTo(W - M, y).strokeColor('#E8E8E8').lineWidth(0.5).stroke()
-
-    // ── DETAILS ROW ────────────────────────────────────────────────────────
+    y += 88
+    doc.moveTo(M, y).lineTo(W - M, y).strokeColor('#E0E0E0').lineWidth(0.5).stroke()
     y += 16
 
-    function detail(label, value, x, dy) {
-      doc.fillColor('#999999').fontSize(7.5).font('Helvetica').text(label, x, y + dy)
-      doc.fillColor('#111111').fontSize(10).font('Helvetica-Bold').text(value, x, y + dy + 11)
+    // ── PERIOD / DUE / STATUS ─────────────────────────────────────────────
+    doc.fillColor('#AAAAAA').fontSize(7.5).font('Helvetica').text('RENTAL PERIOD', colL, y, { lineBreak: false })
+    doc.fillColor('#111111').fontSize(11).font('Helvetica-Bold').text(fmtMonth(month), colL, y + 12, { lineBreak: false })
+
+    if (dueDate) {
+      doc.fillColor('#AAAAAA').fontSize(7.5).font('Helvetica')
+         .text('DUE DATE', colL + 155, y, { lineBreak: false })
+      doc.fillColor('#111111').fontSize(11).font('Helvetica-Bold')
+         .text(fmtDate(dueDate), colL + 155, y + 12, { lineBreak: false })
     }
 
-    detail('RENTAL PERIOD', fmtMonth(month), M, 0)
-    if (dueDate) detail('DUE DATE', fmtDate(dueDate), M + 160, 0)
-
-    // Status pill
+    // Status pill (top right)
     const sBg    = status === 'Paid' ? '#D4EDDA' : status === 'Overdue' ? '#FADADD' : status === 'Partial' ? '#FFF3CD' : '#E2E3E5'
-    const sColor = status === 'Paid' ? '#155724' : status === 'Overdue' ? '#721C24' : status === 'Partial' ? '#856404' : '#383D41'
-    const pW = 70, pH = 20
-    const pX = W - M - pW, pY = y
-    doc.rect(pX, pY, pW, pH).fill(sBg)
-    doc.fillColor(sColor).fontSize(8).font('Helvetica-Bold')
-       .text(status.toUpperCase(), pX, pY + 6, { width: pW, align: 'center' })
+    const sFg    = status === 'Paid' ? '#155724' : status === 'Overdue' ? '#721C24' : status === 'Partial' ? '#856404' : '#383D41'
+    doc.rect(W - M - 72, y, 72, 22).fill(sBg)
+    doc.fillColor(sFg).fontSize(8.5).font('Helvetica-Bold')
+       .text(status.toUpperCase(), W - M - 72, y + 7, { width: 72, align: 'center', lineBreak: false })
 
-    // ── LINE ITEMS TABLE ───────────────────────────────────────────────────
+    // ── TABLE ─────────────────────────────────────────────────────────────
     y += 50
 
-    // Table header
+    // Header row
     doc.rect(M, y, CW, 24).fill('#111111')
-    doc.fillColor('#BBBBBB').fontSize(8).font('Helvetica-Bold')
-       .text('DESCRIPTION', M + 12, y + 8)
-       .text('AMOUNT (RM)', W - M - 112, y + 8, { width: 102, align: 'right' })
+    doc.fillColor('#CCCCCC').fontSize(8).font('Helvetica-Bold')
+       .text('DESCRIPTION', M + 12, y + 8, { lineBreak: false })
+       .text('AMOUNT (RM)', W - M - 110, y + 8, { width: 100, align: 'right', lineBreak: false })
     y += 24
 
-    let altRow = false
-    function drawRow(label, sublabel, amount, opts) {
-      const bg  = opts && opts.bg  ? opts.bg  : altRow ? '#F8F8F8' : '#FFFFFF'
-      const ac  = opts && opts.ac  ? opts.ac  : '#111111'
-      const bld = opts && opts.bld ? opts.bld : false
-      const rh  = sublabel ? 36 : 28
+    let alt = false
+    function row(label, sub, amount, opts) {
+      const bg  = opts?.bg  || (alt ? '#F7F7F7' : '#FFFFFF')
+      const ac  = opts?.ac  || '#111111'
+      const bld = opts?.bld || false
+      const rh  = sub ? 36 : 28
       doc.rect(M, y, CW, rh).fill(bg)
-      if (opts && opts.accent) doc.rect(M, y, 3, rh).fill(opts.accent)
+      if (opts?.accent) doc.rect(M, y, 3, rh).fill(opts.accent)
       doc.fillColor('#444444').fontSize(9).font(bld ? 'Helvetica-Bold' : 'Helvetica')
-         .text(label, M + 12, y + (sublabel ? 7 : 10))
-      if (sublabel) {
-        doc.fillColor('#999999').fontSize(7.5).font('Helvetica')
-           .text(sublabel, M + 12, y + 21)
-      }
+         .text(label, M + 12, y + (sub ? 7 : 10), { lineBreak: false })
+      if (sub) doc.fillColor('#999999').fontSize(7.5).font('Helvetica').text(sub, M + 12, y + 21, { lineBreak: false })
       if (amount !== null) {
         doc.fillColor(ac).fontSize(10).font(bld ? 'Helvetica-Bold' : 'Helvetica')
-           .text(fmtRM(amount), W - M - 112, y + (sublabel ? 11 : 9), { width: 102, align: 'right' })
+           .text(fmtRM(amount), W - M - 110, y + (sub ? 11 : 9), { width: 100, align: 'right', lineBreak: false })
       }
       doc.moveTo(M, y + rh).lineTo(W - M, y + rh).strokeColor('#EEEEEE').lineWidth(0.5).stroke()
       y += rh
-      altRow = !altRow
+      alt = !alt
     }
 
     if (bf > 0) {
-      drawRow(
-        'Balance Brought Forward (B/F)',
+      row('Balance Brought Forward (B/F)',
         `Outstanding as at ${fmtMonth(priorMonth(month))}`,
-        bf,
-        { bg: '#FFF9F9', ac: '#C62828', accent: '#C62828' }
-      )
+        bf, { bg: '#FFF8F8', ac: '#C62828', accent: '#C62828' })
     }
-    drawRow(`Monthly Rent — ${fmtMonth(month)}`, null, amtDue)
-
-    // Subtotal separator
-    y += 4
-    doc.moveTo(M, y).lineTo(W - M, y).strokeColor('#DDDDDD').lineWidth(0.75).stroke()
-    y += 4
+    row(`Monthly Rent — ${fmtMonth(month)}`, null, amtDue)
 
     // Total due
-    doc.rect(M, y, CW, 30).fill('#F2F2F2')
-    doc.fillColor('#333333').fontSize(9).font('Helvetica-Bold').text('TOTAL AMOUNT DUE', M + 12, y + 10)
+    y += 4
+    doc.rect(M, y, CW, 30).fill('#EFEFEF')
+    doc.fillColor('#333333').fontSize(9).font('Helvetica-Bold').text('TOTAL AMOUNT DUE', M + 12, y + 10, { lineBreak: false })
     doc.fillColor('#111111').fontSize(11).font('Helvetica-Bold')
-       .text(fmtRM(totalOwed), W - M - 112, y + 9, { width: 102, align: 'right' })
+       .text(fmtRM(totalOwed), W - M - 110, y + 9, { width: 100, align: 'right', lineBreak: false })
     y += 30
 
-    altRow = false
-    drawRow(
-      'Amount Paid',
-      payDate ? `Received ${fmtDate(payDate)}` : null,
-      amtPaid,
-      { bg: '#F7FBF7', ac: '#2E7D32' }
-    )
+    alt = false
+    row('Amount Paid', payDate ? `Received ${fmtDate(payDate)}` : null,
+      amtPaid, { bg: '#F6FBF6', ac: '#2E7D32' })
 
-    // Outstanding balance
+    // Balance row
     y += 4
-    const isCleared = balance <= 0
-    const balBg     = isCleared ? '#EAF4EA' : '#FEF0F0'
-    const balFg     = isCleared ? '#1B5E20' : '#B71C1C'
+    const balBg = isCleared ? '#EBF5EB' : '#FEF0F0'
+    const balFg = isCleared ? '#1B5E20' : '#B71C1C'
     doc.rect(M, y, CW, 40).fill(balBg)
     doc.rect(M, y, 3, 40).fill(balFg)
-    doc.fillColor('#666666').fontSize(8).font('Helvetica').text('OUTSTANDING BALANCE', M + 12, y + 9)
+    doc.fillColor('#777777').fontSize(7.5).font('Helvetica').text('OUTSTANDING BALANCE', M + 12, y + 9, { lineBreak: false })
     if (isCleared) {
-      doc.fillColor(balFg).fontSize(8).font('Helvetica').text('✓ Account fully settled', M + 12, y + 22)
+      doc.fillColor(balFg).fontSize(8).font('Helvetica').text('✓ Account fully settled', M + 12, y + 22, { lineBreak: false })
     }
     doc.fillColor(balFg).fontSize(16).font('Helvetica-Bold')
-       .text(fmtRM(Math.abs(balance)), W - M - 112, y + 12, { width: 102, align: 'right' })
+       .text(fmtRM(Math.abs(balance)), W - M - 110, y + 12, { width: 100, align: 'right', lineBreak: false })
     y += 40
 
-    // ── PAYMENT DETAILS ────────────────────────────────────────────────────
-    y += 18
+    // ── PAYMENT METHOD ─────────────────────────────────────────────────────
     if (method && method !== '—') {
-      doc.fillColor('#999999').fontSize(7.5).font('Helvetica').text('PAYMENT METHOD', M, y)
-      doc.fillColor('#333333').fontSize(10).font('Helvetica').text(method, M, y + 12)
+      y += 18
+      doc.fillColor('#AAAAAA').fontSize(7.5).font('Helvetica').text('PAYMENT METHOD', M, y, { lineBreak: false })
+      doc.fillColor('#333333').fontSize(10).font('Helvetica').text(method, M, y + 12, { lineBreak: false })
       y += 32
     }
 
     // ── NOTE ───────────────────────────────────────────────────────────────
-    y += 6
-    doc.rect(M, y, CW, 36).fill('#FFFDF0').strokeColor('#F0E8B0').lineWidth(0.5).stroke()
-    doc.fillColor('#8A6D00').fontSize(7.5).font('Helvetica-Bold').text('NOTE', M + 10, y + 7)
+    y += 10
+    doc.rect(M, y, CW, 38).fill('#FFFDF0')
+    doc.fillColor('#8A6D00').fontSize(7.5).font('Helvetica-Bold').text('NOTE', M + 10, y + 8, { lineBreak: false })
     doc.fillColor('#666666').fontSize(8).font('Helvetica')
-       .text(
-         'This document is auto-generated from Pointgate\'s property management system. ' +
-         'For disputes or enquiries, contact pgprop@pointgate.net or +60 12-457 4600.',
-         M + 10, y + 18, { width: CW - 20 }
-       )
+       .text('This document is auto-generated from Pointgate\'s property management system. ' +
+             'For disputes or enquiries, contact pgprop@pointgate.net or +60 12-457 4600.',
+         M + 10, y + 19, { width: CW - 20 })
 
     // ── FOOTER ─────────────────────────────────────────────────────────────
     doc.rect(0, H - 52, W, 52).fill('#111111')
     doc.rect(0, H - 52, W, 2).fill('#AAFF00')
-    doc.fillColor('#666666').fontSize(8).font('Helvetica')
+    doc.fillColor('#777777').fontSize(8).font('Helvetica')
        .text('Pointgate Properties Sdn Bhd  ·  Lot 3417-13, Jalan Merbau, Kampung Melayu Subang, 40150 Shah Alam, Selangor',
-         M, H - 42, { width: CW, align: 'center' })
-    doc.fillColor('#444444').fontSize(7.5)
+         M, H - 40, { width: CW, align: 'center', lineBreak: false })
+    doc.fillColor('#555555').fontSize(7.5)
        .text(`${invNum}  ·  Generated ${new Date().toISOString().substring(0, 10)}`,
-         M, H - 27, { width: CW, align: 'center' })
+         M, H - 25, { width: CW, align: 'center', lineBreak: false })
 
     doc.end()
     await new Promise(resolve => doc.on('end', resolve))
 
     const buf = Buffer.concat(chunks)
     const { url } = await uploadBlob(
-      `pointgate/invoices/${invNum}_${Date.now()}.pdf`,
-      buf, 'application/pdf'
+      `pointgate/invoices/${invNum}_${Date.now()}.pdf`, buf, 'application/pdf'
     )
 
-    // ── Write back to Notion ───────────────────────────────────────────────
+    // Write back to Notion (fire-and-forget)
     const normalId = pageId.replace(/-/g, '').replace(
       /^(.{8})(.{4})(.{4})(.{4})(.{12})$/, '$1-$2-$3-$4-$5'
     )
     patchPage(normalId, {
       'Invoice No':  { rich_text: [{ text: { content: invNum } }] },
       'Invoice PDF': { url },
-    }, token).catch(e => console.warn('[pointgate:invoice] notion write-back failed:', e.message))
+    }, token).catch(e => console.warn('[pointgate:invoice] notion write-back:', e.message))
 
     res.json({ url, invNum })
   } catch (err) {

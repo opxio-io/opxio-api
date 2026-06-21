@@ -53,6 +53,7 @@ async function fetchTenantMap(token) {
 // Build map: propertyId → [{tenantId, start, end}] sorted by start desc
 // Used to resolve tenant for historical payments with no Tenant relation
 async function fetchLeaseMap(token) {
+  try {
   const pages = await queryDB(PG.LEASES, undefined, token)
   const map = {}
   for (const p of pages) {
@@ -70,6 +71,10 @@ async function fetchLeaseMap(token) {
     map[id].sort((a, b) => (b.start || '').localeCompare(a.start || ''))
   }
   return map
+  } catch (e) {
+    console.warn('[pointgate:dashboard] fetchLeaseMap failed (DB not shared with integration?):', e.message)
+    return {}
+  }
 }
 
 // Return tenantId for the lease active during a given YYYY-MM month

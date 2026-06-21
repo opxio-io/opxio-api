@@ -8,7 +8,7 @@ import { patchPage }                    from '../../../lib/notion.js'
 import { cacheDelete, cacheKey }        from '../../../lib/cache.js'
 
 const NOTION_KEY   = () => process.env.POINTGATE_NOTION_KEY || process.env.NOTION_API_KEY
-const DASHBOARD_CK = cacheKey('pointgate', 'dashboard', 'v1')
+const DASHBOARD_CK = cacheKey('pointgate', 'dashboard', 'v2')
 
 const ALLOWED_TYPES = new Set([
   'image/jpeg','image/jpg','image/png','image/webp','image/heic',

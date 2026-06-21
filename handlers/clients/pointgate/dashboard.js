@@ -19,7 +19,7 @@ const PG = {
   LEASES:     'e01bc0b0-44b2-4870-a415-8820fe819a07'.replace(/-/g, ''),
 }
 
-const CK = cacheKey('pointgate', 'dashboard', 'v2')
+const CK = cacheKey('pointgate', 'dashboard', 'v3')
 
 // ── Notion fetchers ────────────────────────────────────────────────────────
 

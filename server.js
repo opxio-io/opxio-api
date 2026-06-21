@@ -118,6 +118,7 @@ async function startServer() {
     executiveRoutes,
     cupterraRoutes,
     opxioRoutes,
+    pointgateRoutes,
   ] = await Promise.all([
     safeImport('./routes/clients/creaitors/index.js',            'creaitors'),
     safeImport('./routes/clients/creaitors/marketing/index.js',  'creaitors/marketing'),
@@ -126,6 +127,7 @@ async function startServer() {
     safeImport('./routes/clients/creaitors/executive/index.js',  'creaitors/executive'),
     safeImport('./routes/clients/shin-supplies/index.js',        'shin-supplies'),
     safeImport('./routes/clients/opxio/index.js',                'opxio'),
+    safeImport('./routes/clients/pointgate/index.js',            'pointgate'),
   ])
 
   // Creaitors — legacy paths (keep for backward compat)
@@ -149,6 +151,9 @@ async function startServer() {
   // Opxio internal
   app.use('/api/clients/opxio', opxioOriginGuard, opxioRoutes)
 
+  // Pointgate — Notion automation origin allowed
+  app.use('/api/clients/pointgate', opxioOriginGuard, pointgateRoutes)
+
   app.use((req, res) => res.status(404).json({ error: 'Not found', path: req.path }))
   app.use((err, req, res, next) => {
     console.error(err)
@@ -166,7 +171,7 @@ async function startServer() {
       { label: 'shin-supplies/crm-pipeline',          url: `${BASE}/shin-supplies/crm-pipeline?token=${SHIN_TOKEN}` },
       { label: 'creaitors/crm',                       url: `${BASE}/creaitors/crm?token=${CREAITORS_TOKEN}` },
       { label: 'creaitors/campaign-stats',             url: `${BASE}/creaitors/campaign-stats?token=${CREAITORS_TOKEN}` },
-      { label: 'creaitors/content-stats',              url: `${BASE}/creaitors/content-stats?token=${CREAITORS_TOKEN}` },
+      { label: 'creaitors/content-stats',             url: `${BASE}/creaitors/content-stats?token=${CREAITORS_TOKEN}` },
       { label: 'creaitors/employee-stats',             url: `${BASE}/creaitors/employee-stats?token=${CREAITORS_TOKEN}` },
       { label: 'creaitors/kol-data',                   url: `${BASE}/creaitors/kol-data?token=${CREAITORS_TOKEN}` },
       { label: 'creaitors/bottlenecks',                url: `${BASE}/creaitors/bottlenecks?token=${CREAITORS_TOKEN}` },

@@ -21,10 +21,7 @@ const CK = cacheKey('pointgate', 'dashboard', 'v1')
 // ── Notion fetchers ────────────────────────────────────────────────────────
 
 async function fetchPayments(token) {
-  return queryDB(PG.PAYMENTS, {
-    property: 'Payment Month',
-    date: { on_or_after: '2026-01-01' },
-  }, token)
+  return queryDB(PG.PAYMENTS, undefined, token)
 }
 
 async function fetchPropMap(token) {
@@ -135,19 +132,29 @@ export async function handler(req, res) {
       })
     }
 
+    // Dedup: keep one row per lot+month (latest by page creation if duplicates)
+    const seen = new Map()
+    for (const row of rows) {
+      const key = `${row.lot}__${row.month}`
+      if (!seen.has(key)) seen.set(key, row)
+    }
+    const deduped = [...seen.values()]
+
     // Sort by lot code (alphanumeric), then month
-    rows.sort((a, b) =>
+    deduped.sort((a, b) =>
       a.lot.localeCompare(b.lot, 'en', { numeric: true }) ||
       a.month.localeCompare(b.month)
     )
 
+    const rows_final   = deduped
+
     // Compute KPIs
-    const total        = rows.length
-    const paidCount    = rows.filter(r => r.status === 'Paid').length
-    const partialCount = rows.filter(r => r.status === 'Partial').length
-    const overdueCount = rows.filter(r => r.status === 'Overdue').length
-    const totalDue     = rows.reduce((s, r) => s + r.amtDue,  0)
-    const totalPaid    = rows.reduce((s, r) => s + r.amtPaid, 0)
+    const total        = rows_final.length
+    const paidCount    = rows_final.filter(r => r.status === 'Paid').length
+    const partialCount = rows_final.filter(r => r.status === 'Partial').length
+    const overdueCount = rows_final.filter(r => r.status === 'Overdue').length
+    const totalDue     = rows_final.reduce((s, r) => s + r.amtDue,  0)
+    const totalPaid    = rows_final.reduce((s, r) => s + r.amtPaid, 0)
     const outstanding  = totalDue - totalPaid
     const rate         = totalDue > 0 ? (totalPaid / totalDue) * 100 : 0
 
@@ -162,7 +169,7 @@ export async function handler(req, res) {
     res.set('X-Cache', result.stale ? 'STALE' : 'HIT')
     res.json({
       kpi: { total, paidCount, partialCount, overdueCount, totalDue, totalPaid, outstanding, rate },
-      rows,
+      rows: rows_final,
       blocks,
       ts:      new Date().toISOString(),
       latency: Date.now() - t0,

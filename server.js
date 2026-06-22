@@ -1,5 +1,6 @@
 import 'dotenv/config'
 import express from 'express'
+import cron from 'node-cron'
 import cors from 'cors'
 
 import pipelineRoutes   from './routes/pipeline.js'
@@ -213,6 +214,19 @@ async function startServer() {
       warmCache()
       setInterval(warmCache, 4 * 60 * 1000)
     }, 30_000)
+
+    // ── Pointgate overdue notifications — 09:00 MYT (01:00 UTC) daily ──────
+    cron.schedule('0 1 * * *', async () => {
+      console.log('[cron] pointgate notify-overdue starting...')
+      try {
+        const { runNotifyOverdue } = await import('./handlers/clients/pointgate/notify-overdue.js')
+        const token = process.env.POINTGATE_NOTION_KEY || process.env.NOTION_API_KEY
+        const r = await runNotifyOverdue(token)
+        console.log(`[cron] pointgate notify done — 14d: ${r.sent14.length}, 21d: ${r.sent21.length}, errors: ${r.errors.length}`)
+      } catch (e) {
+        console.error('[cron] pointgate notify-overdue failed:', e.message)
+      }
+    }, { timezone: 'UTC' })
   })
 }
 

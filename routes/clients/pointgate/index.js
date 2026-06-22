@@ -6,17 +6,20 @@ import { handler as paymentHandler }       from '../../../handlers/clients/point
 import { handler as receiptHandler }       from '../../../handlers/clients/pointgate/receipt.js'
 import { handler as invoiceHandler }       from '../../../handlers/clients/pointgate/invoice.js'
 import { handler as notifyOverdueHandler } from '../../../handlers/clients/pointgate/notify-overdue.js'
+import { listHandler as overdueListHandler, sendHandler as overdueSendHandler } from '../../../handlers/clients/pointgate/overdue.js'
 
 const router = Router()
 
-router.post('/statement',      statementHandler)
-router.get('/statement',       statementHandler)
-router.get('/dashboard',       dashboardHandler)
-router.patch('/payment',       paymentHandler)
-router.post('/payment',        paymentHandler)
-router.post('/receipt',        receiptHandler)
-router.post('/invoice',        invoiceHandler)
-router.post('/notify-overdue', notifyOverdueHandler)
+router.post('/statement',       statementHandler)
+router.get('/statement',        statementHandler)
+router.get('/dashboard',        dashboardHandler)
+router.patch('/payment',        paymentHandler)
+router.post('/payment',         paymentHandler)
+router.post('/receipt',         receiptHandler)
+router.post('/invoice',         invoiceHandler)
+router.post('/notify-overdue',  notifyOverdueHandler)
+router.get('/overdue',          overdueListHandler)
+router.post('/overdue/send',    overdueSendHandler)
 
 router.get('/', (_req, res) => res.json({ ok: true, client: 'pointgate' }))
 

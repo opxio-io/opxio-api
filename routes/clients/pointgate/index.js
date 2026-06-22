@@ -7,6 +7,7 @@ import { handler as receiptHandler }       from '../../../handlers/clients/point
 import { handler as invoiceHandler }       from '../../../handlers/clients/pointgate/invoice.js'
 import { handler as notifyOverdueHandler } from '../../../handlers/clients/pointgate/notify-overdue.js'
 import { listHandler as overdueListHandler, sendHandler as overdueSendHandler } from '../../../handlers/clients/pointgate/overdue.js'
+import { handler as fixStatusHandler }        from '../../../handlers/clients/pointgate/fix-property-status.js'
 import { handler as propertiesHandler }        from '../../../handlers/clients/pointgate/properties.js'
 
 const router = Router()
@@ -21,6 +22,7 @@ router.post('/invoice',         invoiceHandler)
 router.post('/notify-overdue',  notifyOverdueHandler)
 router.get('/overdue',          overdueListHandler)
 router.get('/properties',       propertiesHandler)
+router.post('/fix-property-status', fixStatusHandler)
 router.post('/overdue/send',    overdueSendHandler)
 
 router.get('/', (_req, res) => res.json({ ok: true, client: 'pointgate' }))

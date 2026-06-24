@@ -120,6 +120,7 @@ async function startServer() {
     cupterraRoutes,
     opxioRoutes,
     pointgateRoutes,
+    nadiaCatsRoutes,
   ] = await Promise.all([
     safeImport('./routes/clients/creaitors/index.js',            'creaitors'),
     safeImport('./routes/clients/creaitors/marketing/index.js',  'creaitors/marketing'),
@@ -129,6 +130,7 @@ async function startServer() {
     safeImport('./routes/clients/shin-supplies/index.js',        'shin-supplies'),
     safeImport('./routes/clients/opxio/index.js',                'opxio'),
     safeImport('./routes/clients/pointgate/index.js',            'pointgate'),
+    safeImport('./routes/clients/nadia-cats/index.js',           'nadia-cats'),
   ])
 
   // Creaitors — legacy paths (keep for backward compat)
@@ -148,6 +150,9 @@ async function startServer() {
   // Shin Supplies
   app.use('/api/cupterra',              widgetOriginGuard, cupterraRoutes)
   app.use('/api/clients/shin-supplies', widgetOriginGuard, cupterraRoutes)
+
+  // Nadia — personal cat health dashboard
+  app.use('/api/clients/nadia-cats', widgetOriginGuard, nadiaCatsRoutes)
 
   // Opxio internal
   app.use('/api/clients/opxio', opxioOriginGuard, opxioRoutes)

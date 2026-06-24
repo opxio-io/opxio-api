@@ -131,6 +131,8 @@ function buildFetchPromise(ck, notionKey) {
         pricePerCourse: getNumber(pp['Price per Course (RM)']),
         supplier:       getRichText(pp['Supplier / Source']) || null,
         sideEffects:    getRichText(pp['Side Effects to Watch']) || null,
+        restockReminder: getCheckbox(pp['Restock Reminder']),
+        notes:          getRichText(pp['Notes']) || null,
         // GS-specific
         gsForm:          getSelect(pp['GS Form']),
         gsConcentration: getRichText(pp['GS Concentration']) || null,
@@ -240,7 +242,14 @@ function buildFetchPromise(ck, notionKey) {
       }
     })
 
-    const fresh = { cats: result, total: cats.length }
+    // Build restock alerts across all cats
+    const restockAlerts = []
+    for (const cat of result) {
+      for (const m of cat.activeMeds || []) {
+        if (m.restockReminder) restockAlerts.push({ catName: cat.name, medName: m.name, notes: m.notes, supplier: m.supplier })
+      }
+    }
+    const fresh = { cats: result, restockAlerts, total: cats.length }
     cacheSet(ck, fresh)
     return fresh
   }).finally(() => _inflight.delete(ck))

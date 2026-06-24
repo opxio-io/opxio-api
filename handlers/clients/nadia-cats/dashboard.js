@@ -4,8 +4,7 @@
 import { cacheGet, cacheSet, cacheKey, cacheDelete } from "../../../lib/cache.js"
 import { notionQueue } from "../../../lib/queue.js"
 
-const NOTION_KEY   = process.env.NADIA_NOTION_KEY
-const WIDGET_TOKEN = process.env.NADIA_WIDGET_TOKEN || 'cats-hq-2024'
+const NOTION_KEY   = process.env.NOTION_API_KEY
 const TIMEOUT_MS   = 8_000
 
 const CATS_DB       = 'ab482fba957f4ac1806ea8e5d3f29c10'
@@ -255,9 +254,6 @@ export async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Widget-Token')
   res.setHeader('Cache-Control', 'no-store')
   if (req.method === 'OPTIONS') return res.status(200).end()
-
-  const token = req.query.token || req.headers['x-widget-token']
-  if (!token || token !== WIDGET_TOKEN) return res.status(403).json({ error: 'Invalid token' })
 
   const notionKey = NOTION_KEY
   if (!notionKey) return res.status(503).json({ error: 'NADIA_NOTION_KEY not configured' })

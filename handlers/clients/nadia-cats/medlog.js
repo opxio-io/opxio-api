@@ -1,38 +1,61 @@
 // handlers/clients/nadia-cats/medlog.js
-// Medication Daily Log — GET entries by date, PATCH to check off
+// All active medications for all cats — daily check-off via Last Given Date
 
+import { cacheGet, cacheSet, cacheKey } from "../../../lib/cache.js"
 import { notionQueue } from "../../../lib/queue.js"
 
 const NOTION_KEY = process.env.NOTION_API_KEY
 const TIMEOUT_MS = 8_000
-const LOG_DB     = 'efb0a61ce3c847afb202043643721767'
+const MEDS_DB    = 'd6cf8fb4130546cf802765438423509e'
+const CATS_DB    = 'ab482fba957f4ac1806ea8e5d3f29c10'
 
-const NOTION_HEADERS = () => ({
+const NOTION_HDR = () => ({
   Authorization: `Bearer ${NOTION_KEY}`,
   'Notion-Version': '2022-06-28',
   'Content-Type': 'application/json',
 })
 
 async function notionFetch(url, opts = {}) {
-  const ctrl  = new AbortController()
+  const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS)
   try {
     return await notionQueue.add(async () => {
-      const r = await fetch(url, { ...opts, signal: ctrl.signal, headers: NOTION_HEADERS() })
+      const r = await fetch(url, { ...opts, signal: ctrl.signal, headers: NOTION_HDR() })
       if (!r.ok) throw new Error(`Notion ${r.status}: ${await r.text()}`)
       return r.json()
     })
-  } finally {
-    clearTimeout(timer)
-  }
+  } finally { clearTimeout(timer) }
 }
 
-const getTitle    = p => (p?.title    || []).map(t => t.plain_text).join('')
+async function queryAll(dbId, filter) {
+  let results = [], hasMore = true, cursor
+  while (hasMore) {
+    const body = { page_size: 100, ...(filter && { filter }), ...(cursor && { start_cursor: cursor }) }
+    const d = await notionFetch(`https://api.notion.com/v1/databases/${dbId}/query`, {
+      method: 'POST', body: JSON.stringify(body),
+    })
+    results = results.concat(d.results)
+    hasMore = d.has_more
+    cursor  = d.next_cursor
+  }
+  return results
+}
+
+const getTitle    = p => (p?.title     || []).map(t => t.plain_text).join('')
+const getRich     = p => (p?.rich_text || []).map(t => t.plain_text).join('')
 const getSelect   = p => p?.select?.name || null
 const getDate     = p => p?.date?.start  || null
 const getNumber   = p => p?.number       ?? null
-const getCheckbox = p => p?.checkbox     === true
 const getRelIds   = p => (p?.relation    || []).map(r => r.id)
+
+function gsDayInfo(startDate) {
+  if (!startDate) return null
+  const start = new Date(startDate)
+  const today = new Date()
+  const day   = Math.floor((today - start) / 86400000) + 1
+  if (day < 1 || day > 84) return null
+  return { day, pct: Math.round((day / 84) * 100), day42: day === 42, day84: day === 84 }
+}
 
 export async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
@@ -40,57 +63,104 @@ export async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
   if (req.method === 'OPTIONS') return res.status(204).end()
 
-  // PATCH — toggle checkbox
+  // PATCH /:pageId — mark given (today) or unmark
   if (req.method === 'PATCH') {
     const pageId = req.params?.pageId || req.query?.pageId
     const { given } = req.body || {}
     if (!pageId) return res.status(400).json({ error: 'pageId required' })
+    const today = new Date().toISOString().slice(0, 10)
     try {
       await notionFetch(`https://api.notion.com/v1/pages/${pageId}`, {
         method: 'PATCH',
-        body: JSON.stringify({ properties: { 'Given ✅': { checkbox: !!given } } }),
+        body: JSON.stringify({
+          properties: {
+            'Last Given Date': given ? { date: { start: today } } : { date: null },
+          }
+        }),
       })
-      return res.json({ ok: true, given: !!given })
+      return res.json({ ok: true, given: !!given, date: given ? today : null })
     } catch (e) {
       return res.status(500).json({ error: e.message })
     }
   }
 
-  // GET — entries for a date
-  const date = req.query?.date || new Date().toISOString().slice(0, 10)
+  // GET — all active meds grouped by cat, with given-today status
+  const today = new Date().toISOString().slice(0, 10)
+  const ck    = cacheKey('nadia-cats:medlog-cats', 'global')
+
   try {
-    const data = await notionFetch(`https://api.notion.com/v1/databases/${LOG_DB}/query`, {
-      method: 'POST',
-      body: JSON.stringify({
-        filter: { property: 'Date', date: { equals: date } },
-        sorts:  [{ property: 'Log Entry', direction: 'ascending' }],
-        page_size: 50,
-      }),
-    })
-
-    const entries = data.results.map(page => {
-      const p = page.properties
-      return {
-        id:        page.id,
-        title:     getTitle(p['Log Entry']),
-        date:      getDate(p['Date']),
-        dayNum:    getNumber(p['Day #']),
-        given:     getCheckbox(p['Given ✅']),
-        milestone: getSelect(p['Milestone']),
-        catIds:    getRelIds(p['Cat']),
-        medIds:    getRelIds(p['Medication']),
-        notes:     (p['Notes']?.rich_text || []).map(t => t.plain_text).join(''),
+    // Cache cat names for 10 min
+    let catMap = cacheGet(ck)
+    if (!catMap) {
+      const cats = await queryAll(CATS_DB)
+      catMap = {}
+      for (const c of cats) {
+        catMap[c.id.replace(/-/g, '')] = getTitle(c.properties['Name'])
       }
-    })
-
-    const byCat = {}
-    for (const e of entries) {
-      const catName = e.title.split(' · ')[0] || 'Unknown'
-      if (!byCat[catName]) byCat[catName] = []
-      byCat[catName].push(e)
+      cacheSet(ck, catMap, 600_000)
     }
 
-    return res.json({ date, entries, byCat })
+    // Always fresh meds (checkbox state changes)
+    const meds = await queryAll(MEDS_DB, {
+      property: 'Status', select: { equals: 'Active' }
+    })
+
+    // Group by cat
+    const byCat = {}
+    const catOrder = []
+
+    for (const med of meds) {
+      const p        = med.properties
+      const catIds   = getRelIds(p['Cat'])
+      const catId    = catIds[0]?.replace(/-/g, '') || 'unknown'
+      const catName  = catMap[catId] || 'Unknown Cat'
+      const lastGiven = getDate(p['Last Given Date'])
+      const givenToday = lastGiven === today
+
+      const gsInfo = getSelect(p['Med Category']) === 'GS Treatment'
+        ? gsDayInfo(getDate(p['Start Date']))
+        : null
+
+      const entry = {
+        id:         med.id,
+        name:       getTitle(p['Medication Name']),
+        category:   getSelect(p['Med Category']),
+        dosage:     getRich(p['Dosage']) || getRich(p['GS Concentration']),
+        frequency:  getRich(p['Frequency Notes']),
+        unit:       getSelect(p['Unit']),
+        gsForm:     getSelect(p['GS Form']),
+        startDate:  getDate(p['Start Date']),
+        endDate:    getDate(p['End Date']),
+        lastGiven,
+        givenToday,
+        gsInfo,
+        notes:      getRich(p['Notes']),
+        purpose:    getRich(p['For Diagnosis / Treatment']) || getRich(p['Purpose']),
+      }
+
+      if (!byCat[catName]) {
+        byCat[catName] = []
+        catOrder.push({ catName, catId })
+      }
+      byCat[catName].push(entry)
+    }
+
+    // Sort meds: GS first, then by name
+    for (const cat of Object.keys(byCat)) {
+      byCat[cat].sort((a, b) => {
+        if (a.category === 'GS Treatment') return -1
+        if (b.category === 'GS Treatment') return 1
+        return a.name.localeCompare(b.name)
+      })
+    }
+
+    const totalMeds  = meds.length
+    const givenCount = meds.filter(m => {
+      const last = getDate(m.properties['Last Given Date'])
+      return last === today
+    }).length
+
+    return res.json({ today, byCat, catOrder, totalMeds, givenCount })
   } catch (e) {
     return res.status(500).json({ error: e.message })
   }
